@@ -648,9 +648,9 @@ function HumedadScreen({ onBack, user, onGuardar }) {
 }
 
 // ── PANTALLA RESUMEN DEL DÍA ────────────────────────────────────────────────
-function ResumenScreen({ registros }) {
+function ResumenScreen({ registros = [] }) {
   const porTipo = { Goteo: [], Drenaje: [], Humedad: [] };
-  registros.forEach(r => { if (porTipo[r.tipo]) porTipo[r.tipo].push(r); });
+  registros.forEach(r => { if (r && r.tipo && porTipo[r.tipo]) porTipo[r.tipo].push(r); });
 
   const config = {
     Goteo:   { icon: "💧", accent: C.accent,  dim: C.accentDim,  text: C.accentText },
@@ -695,7 +695,7 @@ function ResumenScreen({ registros }) {
           <>
             <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Últimos registros</div>
             {[...registros].reverse().map((r, i) => {
-              const cf = config[r.tipo];
+              const cf = config[r.tipo] || config["Goteo"];
               return (
                 <div key={i} style={{ ...S.card, display: "flex", alignItems: "flex-start", gap: 12 }}>
                   <div style={{
