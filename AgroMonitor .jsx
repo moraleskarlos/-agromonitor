@@ -648,9 +648,12 @@ function HumedadScreen({ onBack, user, onGuardar }) {
 }
 
 // ── PANTALLA RESUMEN DEL DÍA ────────────────────────────────────────────────
-function ResumenScreen({ registros = [] }) {
+function ResumenScreen({ registros }) {
+  const lista = Array.isArray(registros) ? registros : [];
   const porTipo = { Goteo: [], Drenaje: [], Humedad: [] };
-  registros.forEach(r => { if (r && r.tipo && porTipo[r.tipo]) porTipo[r.tipo].push(r); });
+  lista.forEach(r => {
+    try { if (r && r.tipo && porTipo[r.tipo]) porTipo[r.tipo].push(r); } catch(e) {}
+  });
 
   const config = {
     Goteo:   { icon: "💧", accent: C.accent,  dim: C.accentDim,  text: C.accentText },
@@ -685,7 +688,7 @@ function ResumenScreen({ registros = [] }) {
           })}
         </div>
 
-        {registros.length === 0 ? (
+        {lista.length === 0 ? (
           <div style={{ ...S.card, textAlign: "center", padding: "32px 16px" }}>
             <div style={{ fontSize: 36, marginBottom: 10 }}>📋</div>
             <div style={{ color: C.textMuted, fontSize: 13 }}>No hay registros hoy.</div>
@@ -694,7 +697,7 @@ function ResumenScreen({ registros = [] }) {
         ) : (
           <>
             <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Últimos registros</div>
-            {[...registros].reverse().map((r, i) => {
+            {[...lista].reverse().map((r, i) => {
               const cf = config[r.tipo] || config["Goteo"];
               return (
                 <div key={i} style={{ ...S.card, display: "flex", alignItems: "flex-start", gap: 12 }}>
