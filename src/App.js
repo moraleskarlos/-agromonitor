@@ -353,7 +353,7 @@ function LoginScreen({ onLogin }) {
     const u = USUARIOS.find(u => u.nombre === usuario);
     if (!u) { setError("Selecciona tu nombre."); return; }
     if (pin.length < 4) { setError("Ingresa tu PIN de 4 dígitos."); return; }
-    // En prototipo cualquier PIN de 4 dígitos funciona
+    if (u.pin !== pin) { setError("PIN incorrecto. Intenta de nuevo."); return; }
     setError("");
     onLogin(usuario);
   };
@@ -659,7 +659,7 @@ function ResumenScreen() {
     setCargando(false);
   };
 
-  useEffect(() => { cargarRegistros(); }, []);
+  useEffect(() => { cargarRegistros(); }, []); // eslint-disable-line
 
   const porTipo = { Goteo: [], Drenaje: [], Humedad: [] };
   lista.forEach(r => {
@@ -823,3 +823,4 @@ export default function App() {
     </div>
   );
 }
+
