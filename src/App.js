@@ -726,14 +726,15 @@ function ResumenScreen() {
         </div>
         )}
 
-        {!cargando && !error && lista.length === 0 ? (
+         {!cargando && !error && lista.length === 0 && (
           <div style={{ ...S.card, textAlign: "center", padding: "32px 16px" }}>
             <div style={{ fontSize: 36, marginBottom: 10 }}>📋</div>
             <div style={{ color: C.textMuted, fontSize: 13 }}>No hay registros hoy.</div>
             <div style={{ color: C.textDim, fontSize: 11, marginTop: 4 }}>Los registros aparecerán aquí.</div>
           </div>
-        ) : (
-          <>{!cargando && !error && <>
+        )}
+        {!cargando && !error && lista.length > 0 && (
+          <>
             <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Últimos registros</div>
             {[...lista].reverse().map((r, i) => {
               const cf = config[r.tipo] || config["Goteo"];
@@ -747,7 +748,7 @@ function ResumenScreen() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
                       <span style={{ color: cf.accent, fontWeight: 700, fontSize: 13 }}>{r.tipo}</span>
-                      <span style={{ color: C.textDim, fontSize: 11 }}>{r.hora}</span>
+                      <span style={{ color: C.textDim, fontSize: 11 }}>{r.hora || ""}</span>
                     </div>
                     <div style={{ color: C.text, fontSize: 12, marginBottom: 2 }}>
                       {r.equipo || "—"} · {r.sector || "—"}
