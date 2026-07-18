@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgroMonitor — Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:       #0a1a0d;
+      --surface:  #111f14;
+      --card:     #172b1a;
+      --border:   #1e3d22;
+      --accent:   #4caf50;
+      --accent2:  #81c784;
+      --text:     #e8f5e9;
+      --muted:    #6b9470;
+      --dim:      #3a5c3e;
+      --ok:       #4caf50;
+      --warn:     #ffd54f;
+      --danger:   #ef5350;
+      --blue:     #42a5f5;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* HEADER */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo { font-size: 26px; }
+    .header-title { flex: 1; }
+    .header-title h1 { font-size: 18px; font-weight: 800; letter-spacing: -0.3px; }
+    .header-title p { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .last-update { font-size: 11px; color: var(--muted); text-align: right; }
+    #refreshBtn {
+      background: var(--accent);
+      color: #0a1a0d;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    /* LAYOUT */
+    .container { max-width: 1400px; margin: 0 auto; padding: 24px 28px; }
+
+    /* FILTROS */
+    .filters {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 20px;
+      align-items: flex-end;
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 5px; }
+    .filter-group label { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+    .filter-group select, .filter-group input {
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+      min-width: 140px;
+    }
+    #clearFilters {
+      background: transparent;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 600;
+      align-self: flex-end;
+    }
+
+    /* TABS */
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0;
+    }
+    .tab {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 10px 18px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: -1px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* KPI CARDS */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .kpi {
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      text-align: center;
+    }
+    .kpi-icon { font-size: 24px; margin-bottom: 6px; }
+    .kpi-value { font-size: 28px; font-weight: 800; color: var(--accent); }
+    .kpi-label { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 0.5px; margin-top: 3px; }
+
+    /* GRID */
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+    .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 24px; }
+    @media(max-width: 900px) { .grid2 { grid-template-columns: 1fr; } .grid3 { grid-template-columns: 1fr; } }
+
+    /* CARDS */
+    .card {
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+    .card-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* SEMÁFORO */
+    .semaforo-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .sem-item {
+      background: var(--surface);
+      border-radius: 10px;
+      padding: 12px;
+      text-align: center;
+      border: 1.5px solid var(--border);
+    }
+    .sem-name { font-size: 11px; color: var(--muted); font-weight: 700; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .sem-value { font-size: 20px; font-weight: 800; }
+    .sem-badge {
+      display: inline-block;
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-size: 10px;
+      font-weight: 700;
+      margin-top: 4px;
+      letter-spacing: 0.5px;
+    }
+    .ok  { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .danger { color: var(--danger); }
+    .badge-ok   { background: #4caf5022; color: var(--ok); }
+    .badge-warn { background: #ffd54f22; color: var(--warn); }
+    .badge-danger { background: #ef535022; color: var(--danger); }
+
+    /* TABLA */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--surface); }
+    .badge {
+      display: inline-block;
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .badge-goteo   { background: #4caf5022; color: var(--ok); }
+    .badge-drenaje { background: #9c27b022; color: #ce93d8; }
+    .badge-humedad { background: #ffd54f22; color: var(--warn); }
+
+    /* ALERTAS */
+    .alert-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: var(--surface);
+      border-radius: 10px;
+      border-left: 3px solid var(--danger);
+      margin-bottom: 8px;
+    }
+    .alert-icon { font-size: 18px; flex-shrink: 0; }
+    .alert-text { flex: 1; font-size: 13px; }
+    .alert-text strong { color: var(--danger); }
+    .alert-time { font-size: 11px; color: var(--muted); }
+
+    /* CHART */
+    .chart-container { position: relative; height: 240px; }
+
+    /* LOADING */
+    .loading {
+      text-align: center;
+      padding: 48px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .spinner {
+      display: inline-block;
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty { text-align: center; padding: 32px; color: var(--muted); font-size: 13px; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🌿</div>
+  <div class="header-title">
+    <h1>AgroMonitor — Dashboard</h1>
+    <p>Sistema de monitoreo de fertirriego</p>
+  </div>
+  <div class="last-update" id="lastUpdate">Cargando...</div>
+  <button id="refreshBtn" onclick="cargarDatos()">↻ Actualizar</button>
+</header>
+
+<div class="container">
+
+  <!-- FILTROS -->
+  <div class="filters">
+    <div class="filter-group">
+      <label>Tipo</label>
+      <select id="filtroTipo" onchange="aplicarFiltros()">
+        <option value="">Todos</option>
+        <option value="Goteo">Goteo</option>
+        <option value="Drenaje">Drenaje</option>
+        <option value="Humedad">Humedad</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Equipo</label>
+      <select id="filtroEquipo" onchange="aplicarFiltros()">
+        <option value="">Todos</option>
+        <option>Equipo 3 FRU</option>
+        <option>Equipo HID 3 FRU</option>
+        <option>Equipo 1 FRA</option>
+        <option>Equipo 1 MO</option>
+        <option>Equipo 1 ARA</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Sector</label>
+      <select id="filtroSector" onchange="aplicarFiltros()">
+        <option value="">Todos</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Fecha desde</label>
+      <input type="date" id="filtroDesde" onchange="aplicarFiltros()" />
+    </div>
+    <div class="filter-group">
+      <label>Fecha hasta</label>
+      <input type="date" id="filtroHasta" onchange="aplicarFiltros()" />
+    </div>
+    <button id="clearFilters" onclick="limpiarFiltros()">✕ Limpiar</button>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('resumen', this)">📊 Resumen</button>
+    <button class="tab" onclick="showTab('graficos', this)">📈 Gráficos</button>
+    <button class="tab" onclick="showTab('alertas', this)">🚨 Alertas Z-Score</button>
+    <button class="tab" onclick="showTab('registros', this)">📋 Registros</button>
+  </div>
+
+  <!-- TAB: RESUMEN -->
+  <div id="tab-resumen" class="tab-content active">
+    <div class="kpi-grid" id="kpiGrid">
+      <div class="loading"><div class="spinner"></div><br>Cargando datos...</div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">🌡️ Últimos valores — Goteo</div>
+        <div class="semaforo-grid" id="semaforoGoteo">
+          <div class="empty">Sin datos</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">🚿 Últimos valores — Drenaje</div>
+        <div class="semaforo-grid" id="semaforoDrenaje">
+          <div class="empty">Sin datos</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: GRÁFICOS -->
+  <div id="tab-graficos" class="tab-content">
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">📈 Evolución pH</div>
+        <div class="chart-container"><canvas id="chartPH"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">📈 Evolución CE</div>
+        <div class="chart-container"><canvas id="chartCE"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">📈 Evolución Nitratos</div>
+        <div class="chart-container"><canvas id="chartNitratos"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">📈 Evolución Potasio</div>
+        <div class="chart-container"><canvas id="chartPotasio"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">📈 Evolución Calcio</div>
+        <div class="chart-container"><canvas id="chartCalcio"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">📈 Evolución Sodio</div>
+        <div class="chart-container"><canvas id="chartSodio"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: ALERTAS -->
+  <div id="tab-alertas" class="tab-content">
+    <div class="card">
+      <div class="card-title">🚨 Alertas por Z-Score — valores fuera de rango</div>
+      <div id="alertasContainer">
+        <div class="empty">Sin alertas activas</div>
+      </div>
+    </div>
+    <br>
+    <div class="card">
+      <div class="card-title">📏 Rangos de referencia</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Parámetro</th>
+            <th>Rango Óptimo</th>
+            <th>Alerta Baja</th>
+            <th>Alerta Alta</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>pH</td><td>5.5 — 6.5</td><td style="color:var(--warn)">&lt; 5.0</td><td style="color:var(--danger)">&gt; 7.0</td></tr>
+          <tr><td>CE (dS/m)</td><td>1.2 — 1.8</td><td style="color:var(--warn)">&lt; 0.8</td><td style="color:var(--danger)">&gt; 2.5</td></tr>
+          <tr><td>Nitratos (mg/L)</td><td>100 — 200</td><td style="color:var(--warn)">&lt; 50</td><td style="color:var(--danger)">&gt; 300</td></tr>
+          <tr><td>Potasio (mg/L)</td><td>150 — 300</td><td style="color:var(--warn)">&lt; 100</td><td style="color:var(--danger)">&gt; 400</td></tr>
+          <tr><td>Calcio (mg/L)</td><td>100 — 200</td><td style="color:var(--warn)">&lt; 80</td><td style="color:var(--danger)">&gt; 250</td></tr>
+          <tr><td>Sodio (mg/L)</td><td>&lt; 50</td><td>—</td><td style="color:var(--danger)">&gt; 100</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TAB: REGISTROS -->
+  <div id="tab-registros" class="tab-content">
+    <div class="card">
+      <div class="card-title">📋 Todos los registros</div>
+      <div class="table-wrap">
+        <table id="tablaRegistros">
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th>Fecha</th>
+              <th>Trabajador</th>
+              <th>Equipo</th>
+              <th>Sector</th>
+              <th>pH</th>
+              <th>CE</th>
+              <th>Nitratos</th>
+              <th>Potasio</th>
+              <th>Calcio</th>
+              <th>Sodio</th>
+            </tr>
+          </thead>
+          <tbody id="tablaBody">
+            <tr><td colspan="11" class="empty">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── CONFIGURACIÓN ────────────────────────────────────────────────────────────
+const SHEETS_URL = "https://script.google.com/macros/s/AKfycbydce4hOCVAFuxP5KHtxutF0sPW7M9zdElCPKUzcLZRmkhkvkNxrhowhkIAdClhPBHI/exec";
+const PROXY = "https://api.allorigins.win/get?url=";
+
+const RANGOS = {
+  pH:       { min: 5.5, max: 6.5, alerta_baja: 5.0, alerta_alta: 7.0 },
+  CE:       { min: 1.2, max: 1.8, alerta_baja: 0.8, alerta_alta: 2.5 },
+  Nitratos: { min: 100, max: 200, alerta_baja: 50,  alerta_alta: 300 },
+  Potasio:  { min: 150, max: 300, alerta_baja: 100, alerta_alta: 400 },
+  Calcio:   { min: 100, max: 200, alerta_baja: 80,  alerta_alta: 250 },
+  Sodio:    { min: 0,   max: 50,  alerta_baja: null, alerta_alta: 100 },
+};
+
+let DATOS = [];
+let FILTRADOS = [];
+let charts = {};
+
+// ── CARGAR DATOS ─────────────────────────────────────────────────────────────
+async function cargarDatos() {
+  document.getElementById('lastUpdate').textContent = 'Actualizando...';
+  try {
+    const res = await fetch(PROXY + encodeURIComponent(SHEETS_URL));
+    const json = await res.json();
+    const data = JSON.parse(json.contents);
+    if (data.status === 'ok') {
+      DATOS = data.registros || [];
+      aplicarFiltros();
+      document.getElementById('lastUpdate').textContent = 
+        'Actualizado: ' + new Date().toLocaleTimeString('es-CL');
+    }
+  } catch(e) {
+    document.getElementById('lastUpdate').textContent = 'Error al cargar datos';
+    console.error(e);
+  }
+}
+
+// ── FILTROS ───────────────────────────────────────────────────────────────────
+function aplicarFiltros() {
+  const tipo    = document.getElementById('filtroTipo').value;
+  const equipo  = document.getElementById('filtroEquipo').value;
+  const sector  = document.getElementById('filtroSector').value;
+  const desde   = document.getElementById('filtroDesde').value;
+  const hasta   = document.getElementById('filtroHasta').value;
+
+  FILTRADOS = DATOS.filter(r => {
+    if (tipo   && r.tipo   !== tipo)   return false;
+    if (equipo && r.equipo !== equipo) return false;
+    if (sector && r.sector !== sector) return false;
+    if (desde  && r.fecha  < desde)   return false;
+    if (hasta  && r.fecha  > hasta)    return false;
+    return true;
+  });
+
+  actualizarSectores();
+  renderKPIs();
+  renderSemaforos();
+  renderTabla();
+  renderGraficos();
+  renderAlertas();
+}
+
+function limpiarFiltros() {
+  ['filtroTipo','filtroEquipo','filtroSector','filtroDesde','filtroHasta']
+    .forEach(id => document.getElementById(id).value = '');
+  aplicarFiltros();
+}
+
+function actualizarSectores() {
+  const equipo = document.getElementById('filtroEquipo').value;
+  const sel = document.getElementById('filtroSector');
+  const actual = sel.value;
+  const sectores = [...new Set(DATOS.filter(r => !equipo || r.equipo === equipo).map(r => r.sector).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">Todos</option>' + sectores.map(s => `<option${s===actual?' selected':''}>${s}</option>`).join('');
+}
+
+// ── KPIs ──────────────────────────────────────────────────────────────────────
+function renderKPIs() {
+  const goteo   = FILTRADOS.filter(r => r.tipo === 'Goteo');
+  const drenaje = FILTRADOS.filter(r => r.tipo === 'Drenaje');
+  const humedad = FILTRADOS.filter(r => r.tipo === 'Humedad');
+  const alertas = contarAlertas(FILTRADOS);
+
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="kpi"><div class="kpi-icon">💧</div><div class="kpi-value">${goteo.length}</div><div class="kpi-label">Registros Goteo</div></div>
+    <div class="kpi"><div class="kpi-icon">🚿</div><div class="kpi-value">${drenaje.length}</div><div class="kpi-label">Registros Drenaje</div></div>
+    <div class="kpi"><div class="kpi-icon">🌱</div><div class="kpi-value">${humedad.length}</div><div class="kpi-label">Registros Humedad</div></div>
+    <div class="kpi"><div class="kpi-icon">📊</div><div class="kpi-value">${FILTRADOS.length}</div><div class="kpi-label">Total Registros</div></div>
+    <div class="kpi"><div class="kpi-icon">🚨</div><div class="kpi-value" style="color:${alertas > 0 ? 'var(--danger)' : 'var(--ok)'}">${alertas}</div><div class="kpi-label">Alertas Z-Score</div></div>
+  `;
+}
+
+// ── SEMÁFORO ──────────────────────────────────────────────────────────────────
+function getEstado(param, valor) {
+  const r = RANGOS[param];
+  if (!r || valor === '' || valor === null || valor === undefined) return null;
+  const v = parseFloat(valor);
+  if (isNaN(v)) return null;
+  if (r.alerta_baja && v < r.alerta_baja) return 'danger';
+  if (r.alerta_alta && v > r.alerta_alta) return 'danger';
+  if (v < r.min || v > r.max) return 'warn';
+  return 'ok';
+}
+
+function semItem(param, valor) {
+  const estado = getEstado(param, valor);
+  const v = valor !== '' && valor !== null && valor !== undefined ? parseFloat(valor).toFixed(2) : '—';
+  const badge = estado ? `<div class="sem-badge badge-${estado}">${estado === 'ok' ? '✓ OK' : estado === 'warn' ? '⚠ ALERTA' : '✕ FUERA'}</div>` : '';
+  return `<div class="sem-item">
+    <div class="sem-name">${param}</div>
+    <div class="sem-value ${estado || ''}">${v}</div>
+    ${badge}
+  </div>`;
+}
+
+function renderSemaforos() {
+  const params = ['pH','CE','Nitratos','Potasio','Calcio','Sodio'];
+  const ultGoteo   = FILTRADOS.filter(r => r.tipo === 'Goteo').slice(-1)[0];
+  const ultDrenaje = FILTRADOS.filter(r => r.tipo === 'Drenaje').slice(-1)[0];
+
+  document.getElementById('semaforoGoteo').innerHTML = ultGoteo
+    ? params.map(p => semItem(p, ultGoteo[p])).join('')
+    : '<div class="empty">Sin registros de Goteo</div>';
+
+  document.getElementById('semaforoDrenaje').innerHTML = ultDrenaje
+    ? params.map(p => semItem(p, ultDrenaje[p])).join('')
+    : '<div class="empty">Sin registros de Drenaje</div>';
+}
+
+// ── TABLA ─────────────────────────────────────────────────────────────────────
+function renderTabla() {
+  const tbody = document.getElementById('tablaBody');
+  if (!FILTRADOS.length) {
+    tbody.innerHTML = '<tr><td colspan="11" class="empty">Sin registros</td></tr>';
+    return;
+  }
+  tbody.innerHTML = [...FILTRADOS].reverse().map(r => {
+    const tipo = r.tipo || '—';
+    const badgeClass = tipo === 'Goteo' ? 'badge-goteo' : tipo === 'Drenaje' ? 'badge-drenaje' : 'badge-humedad';
+    return `<tr>
+      <td><span class="badge ${badgeClass}">${tipo}</span></td>
+      <td>${r.fecha || '—'}</td>
+      <td>${(r.trabajador || '—').split(' ')[0]}</td>
+      <td>${r.equipo || '—'}</td>
+      <td>${r.sector || '—'}</td>
+      <td>${fmtVal(r.pH,'pH')}</td>
+      <td>${fmtVal(r.CE,'CE')}</td>
+      <td>${fmtVal(r.Nitratos,'Nitratos')}</td>
+      <td>${fmtVal(r.Potasio,'Potasio')}</td>
+      <td>${fmtVal(r.Calcio,'Calcio')}</td>
+      <td>${fmtVal(r.Sodio,'Sodio')}</td>
+    </tr>`;
+  }).join('');
+}
+
+function fmtVal(val, param) {
+  if (val === '' || val === null || val === undefined) return '<span style="color:var(--dim)">—</span>';
+  const v = parseFloat(val);
+  if (isNaN(v)) return '<span style="color:var(--dim)">—</span>';
+  const estado = getEstado(param, v);
+  const color = estado === 'danger' ? 'var(--danger)' : estado === 'warn' ? 'var(--warn)' : 'var(--text)';
+  return `<span style="color:${color};font-weight:${estado !== 'ok' ? '700' : '400'}">${v.toFixed(2)}</span>`;
+}
+
+// ── GRÁFICOS ──────────────────────────────────────────────────────────────────
+function renderGraficos() {
+  const params = ['pH','CE','Nitratos','Potasio','Calcio','Sodio'];
+  const ids    = ['chartPH','chartCE','chartNitratos','chartPotasio','chartCalcio','chartSodio'];
+
+  const goteo   = FILTRADOS.filter(r => r.tipo === 'Goteo').slice(-20);
+  const drenaje = FILTRADOS.filter(r => r.tipo === 'Drenaje').slice(-20);
+  const labels  = [...new Set([...goteo, ...drenaje].map(r => r.fecha || ''))].sort().slice(-20);
+
+  params.forEach((param, i) => {
+    if (charts[param]) { charts[param].destroy(); }
+    const ctx = document.getElementById(ids[i]).getContext('2d');
+    const rango = RANGOS[param];
+
+    charts[param] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: `Goteo`,
+            data: labels.map(l => {
+              const r = goteo.find(x => x.fecha === l);
+              return r ? parseFloat(r[param]) || null : null;
+            }),
+            borderColor: '#4caf50',
+            backgroundColor: '#4caf5022',
+            tension: 0.4,
+            pointRadius: 4,
+            fill: false,
+          },
+          {
+            label: `Drenaje`,
+            data: labels.map(l => {
+              const r = drenaje.find(x => x.fecha === l);
+              return r ? parseFloat(r[param]) || null : null;
+            }),
+            borderColor: '#ce93d8',
+            backgroundColor: '#ce93d822',
+            tension: 0.4,
+            pointRadius: 4,
+            fill: false,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#6b9470', font: { size: 11 } } },
+          annotation: {}
+        },
+        scales: {
+          x: { ticks: { color: '#6b9470', font: { size: 10 } }, grid: { color: '#1e3d22' } },
+          y: {
+            ticks: { color: '#6b9470', font: { size: 10 } },
+            grid: { color: '#1e3d22' },
+            min: Math.max(0, (rango.alerta_baja || rango.min) * 0.7),
+          }
+        }
+      }
+    });
+  });
+}
+
+// ── ALERTAS Z-SCORE ───────────────────────────────────────────────────────────
+function contarAlertas(datos) {
+  let count = 0;
+  const params = ['pH','CE','Nitratos','Potasio','Calcio','Sodio'];
+  datos.filter(r => r.tipo !== 'Humedad').forEach(r => {
+    params.forEach(p => {
+      if (getEstado(p, r[p]) === 'danger') count++;
+    });
+  });
+  return count;
+}
+
+function renderAlertas() {
+  const params = ['pH','CE','Nitratos','Potasio','Calcio','Sodio'];
+  const alertas = [];
+
+  FILTRADOS.filter(r => r.tipo !== 'Humedad').forEach(r => {
+    params.forEach(p => {
+      const estado = getEstado(p, r[p]);
+      if (estado === 'danger' || estado === 'warn') {
+        const v = parseFloat(r[p]).toFixed(2);
+        const rango = RANGOS[p];
+        let msg = '';
+        if (parseFloat(r[p]) < (rango.alerta_baja || rango.min)) msg = `Valor muy bajo (${v})`;
+        else msg = `Valor muy alto (${v})`;
+        alertas.push({ tipo: r.tipo, fecha: r.fecha, equipo: r.equipo, sector: r.sector, param: p, msg, estado });
+      }
+    });
+  });
+
+  const container = document.getElementById('alertasContainer');
+  if (!alertas.length) {
+    container.innerHTML = '<div class="empty">✓ Sin alertas — todos los valores dentro del rango</div>';
+    return;
+  }
+
+  container.innerHTML = alertas.slice(-20).reverse().map(a => `
+    <div class="alert-item">
+      <div class="alert-icon">${a.estado === 'danger' ? '🔴' : '🟡'}</div>
+      <div class="alert-text">
+        <strong>${a.param}</strong> — ${a.msg}
+        <br><span style="color:var(--muted);font-size:11px">${a.tipo} · ${a.equipo || ''} · ${a.sector || ''}</span>
+      </div>
+      <div class="alert-time">${a.fecha || ''}</div>
+    </div>
+  `).join('');
+}
+
+// ── TABS ──────────────────────────────────────────────────────────────────────
+function showTab(id, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── INICIO ────────────────────────────────────────────────────────────────────
+cargarDatos();
+setInterval(cargarDatos, 15 * 60 * 1000); // Auto-actualiza cada 15 min
+
+// Fecha de hoy por defecto
+const hoy = new Date().toISOString().split('T')[0];
+document.getElementById('filtroHasta').value = hoy;
+</script>
+</body>
+</html>
