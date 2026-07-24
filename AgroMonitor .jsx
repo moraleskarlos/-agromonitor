@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 // ── DATOS REALES ────────────────────────────────────────────────────────────
 const USUARIOS = [
@@ -60,23 +60,22 @@ const C = {
 const S = {
   wrap: {
     minHeight: "100vh",
-    background: `radial-gradient(ellipse at top, #0d2a12 0%, ${C.bg} 60%)`,
+    background: C.bg,
     display: "flex",
     justifyContent: "center",
     alignItems: "flex-start",
-    padding: "28px 16px 48px",
     fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
   },
   phone: {
-    width: 375,
-    minHeight: 750,
+    width: "100%",
+    maxWidth: 480,
+    minHeight: "100vh",
     background: C.surface,
-    borderRadius: 36,
-    border: `1.5px solid ${C.border}`,
+    borderRadius: 0,
+    border: "none",
     overflow: "hidden",
     display: "flex",
     flexDirection: "column",
-    boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px #ffffff08",
     position: "relative",
   },
   statusBar: {
@@ -262,16 +261,7 @@ function fechaLegible() {
 }
 
 // ── COMPONENTES COMUNES ────────────────────────────────────────────────────
-function StatusBar() {
-  return (
-    <div style={S.statusBar}>
-      <span>{new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}</span>
-      <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <span>●●●</span><span>WiFi</span><span>🔋</span>
-      </span>
-    </div>
-  );
-}
+function StatusBar() { return null; }
 
 function BackBtn({ onBack }) {
   return (
@@ -363,7 +353,7 @@ function LoginScreen({ onLogin }) {
     const u = USUARIOS.find(u => u.nombre === usuario);
     if (!u) { setError("Selecciona tu nombre."); return; }
     if (pin.length < 4) { setError("Ingresa tu PIN de 4 dígitos."); return; }
-    // En prototipo cualquier PIN de 4 dígitos funciona
+    if (u.pin !== pin) { setError("PIN incorrecto. Intenta de nuevo."); return; }
     setError("");
     onLogin(usuario);
   };
@@ -479,7 +469,12 @@ function GoteoScreen({ onBack, user, onGuardar }) {
 
   const handleCommon = (k, v) => setCommon(p => ({ ...p, [k]: v, ...(k === "equipo" ? { sector: "" } : {}) }));
 
+  const [err, setErr] = useState("");
+
   const enviar = async () => {
+    if (!common.equipo) { setErr("Debes seleccionar un equipo."); return; }
+    if (!common.sector) { setErr("Debes seleccionar un sector."); return; }
+    setErr("");
     const payload = {
       tipo: "Goteo", trabajador: user, fecha: common.fecha,
       equipo: common.equipo, sector: common.sector,
@@ -505,6 +500,7 @@ function GoteoScreen({ onBack, user, onGuardar }) {
         <div style={S.divider} />
         <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Mediciones</div>
         <MedicionFields data={med} onChange={(k, v) => setMed(p => ({ ...p, [k]: v }))} />
+        {err && <div style={{ color: C.error, fontSize: 12, textAlign: "center", padding: "4px 0" }}>{err}</div>}
         <button style={S.btn(C.accent, C.bg)} onClick={enviar}>✓ Enviar registro</button>
         <button style={S.btnGhost} onClick={onBack}>← Volver al menú</button>
       </div>
@@ -521,7 +517,12 @@ function DrenajeScreen({ onBack, user, onGuardar }) {
 
   const handleCommon = (k, v) => setCommon(p => ({ ...p, [k]: v, ...(k === "equipo" ? { sector: "" } : {}) }));
 
+  const [err, setErr] = useState("");
+
   const enviar = async () => {
+    if (!common.equipo) { setErr("Debes seleccionar un equipo."); return; }
+    if (!common.sector) { setErr("Debes seleccionar un sector."); return; }
+    setErr("");
     const payload = {
       tipo: "Drenaje", trabajador: user, fecha: common.fecha,
       equipo: common.equipo, sector: common.sector,
@@ -547,6 +548,7 @@ function DrenajeScreen({ onBack, user, onGuardar }) {
         <div style={S.divider} />
         <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Mediciones</div>
         <MedicionFields data={med} onChange={(k, v) => setMed(p => ({ ...p, [k]: v }))} />
+        {err && <div style={{ color: C.error, fontSize: 12, textAlign: "center", padding: "4px 0" }}>{err}</div>}
         <button style={S.btn(C.purple, C.white)} onClick={enviar}>✓ Enviar registro</button>
         <button style={S.btnGhost} onClick={onBack}>← Volver al menú</button>
       </div>
@@ -566,7 +568,12 @@ function HumedadScreen({ onBack, user, onGuardar }) {
   const addH = () => { if (hileras.length < 6) setHileras(hs => [...hs, { id: hs.length + 1, hi: "", hm: "", hf: "" }]); };
   const removeH = (id) => { if (hileras.length > 1) setHileras(hs => hs.filter(h => h.id !== id).map((h, i) => ({ ...h, id: i + 1 }))); };
 
+  const [err, setErr] = useState("");
+
   const enviar = async () => {
+    if (!common.equipo) { setErr("Debes seleccionar un equipo."); return; }
+    if (!common.sector) { setErr("Debes seleccionar un sector."); return; }
+    setErr("");
     // Enviar cada hilera como fila separada en Google Sheets
     for (const h of hileras) {
       const payload = {
@@ -633,6 +640,7 @@ function HumedadScreen({ onBack, user, onGuardar }) {
           </div>
         ))}
 
+        {err && <div style={{ color: C.error, fontSize: 12, textAlign: "center", padding: "4px 0" }}>{err}</div>}
         <button style={S.btn(C.yellow, "#1a2a08")} onClick={enviar}>
           ✓ Enviar {hileras.length} hilera{hileras.length > 1 ? "s" : ""}
         </button>
@@ -648,8 +656,29 @@ function HumedadScreen({ onBack, user, onGuardar }) {
 }
 
 // ── PANTALLA RESUMEN DEL DÍA ────────────────────────────────────────────────
-function ResumenScreen({ registros }) {
-  const lista = Array.isArray(registros) ? registros : [];
+function ResumenScreen() {
+  const [lista, setLista] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState(false);
+
+  const cargarRegistros = async () => {
+    setCargando(true);
+    setError(false);
+    try {
+      const res = await fetch("https://api.allorigins.win/get?url=" + encodeURIComponent(SHEETS_URL));
+      const json = await res.json();
+      const data = JSON.parse(json.contents);
+      if (data.status === "ok") setLista(Array.isArray(data.registros) ? data.registros : []);
+      else setLista([]);
+    } catch(e) {
+      setLista([]);
+      setError(true);
+    }
+    setCargando(false);
+  };
+
+  useEffect(() => { cargarRegistros(); }, []); // eslint-disable-line
+
   const porTipo = { Goteo: [], Drenaje: [], Humedad: [] };
   lista.forEach(r => {
     try { if (r && r.tipo && porTipo[r.tipo]) porTipo[r.tipo].push(r); } catch(e) {}
@@ -672,29 +701,57 @@ function ResumenScreen({ registros }) {
       </div>
 
       <div style={S.body}>
+        {/* Botón recargar */}
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button onClick={cargarRegistros} style={{
+            background: C.accentDim, color: C.accentText, border: "none",
+            borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+          }}>↻ Actualizar</button>
+        </div>
+
+        {/* Estado cargando */}
+        {cargando && (
+          <div style={{ ...S.card, textAlign: "center", padding: "32px 16px" }}>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>⏳</div>
+            <div style={{ color: C.textMuted, fontSize: 13 }}>Cargando registros...</div>
+          </div>
+        )}
+
+        {/* Estado error */}
+        {!cargando && error && (
+          <div style={{ ...S.card, textAlign: "center", padding: "24px 16px", borderColor: C.error }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>⚠️</div>
+            <div style={{ color: C.error, fontSize: 13, marginBottom: 8 }}>No se pudo cargar los registros.</div>
+            <button onClick={cargarRegistros} style={{ ...S.btn(C.accent, C.bg), width: "auto", padding: "8px 20px", fontSize: 13 }}>Reintentar</button>
+          </div>
+        )}
+
         {/* Contadores */}
+        {!cargando && !error && (
         <div style={S.grid3}>
-          {Object.entries(porTipo).map(([tipo, lista]) => {
+          {Object.entries(porTipo).map(([tipo, listaT]) => {
             const cf = config[tipo];
             return (
-              <div key={tipo} style={{ ...S.card, textAlign: "center", borderColor: lista.length > 0 ? cf.accent + "44" : C.border }}>
+              <div key={tipo} style={{ ...S.card, textAlign: "center", borderColor: listaT.length > 0 ? cf.accent + "44" : C.border }}>
                 <div style={{ fontSize: 22, marginBottom: 4 }}>{cf.icon}</div>
-                <div style={{ color: lista.length > 0 ? cf.accent : C.textDim, fontSize: 22, fontWeight: 800 }}>
-                  {lista.length}
+                <div style={{ color: listaT.length > 0 ? cf.accent : C.textDim, fontSize: 22, fontWeight: 800 }}>
+                  {listaT.length}
                 </div>
                 <div style={{ color: C.textMuted, fontSize: 10, fontWeight: 600, letterSpacing: 0.5 }}>{tipo}</div>
               </div>
             );
           })}
         </div>
+        )}
 
-        {lista.length === 0 ? (
+         {!cargando && !error && lista.length === 0 && (
           <div style={{ ...S.card, textAlign: "center", padding: "32px 16px" }}>
             <div style={{ fontSize: 36, marginBottom: 10 }}>📋</div>
             <div style={{ color: C.textMuted, fontSize: 13 }}>No hay registros hoy.</div>
             <div style={{ color: C.textDim, fontSize: 11, marginTop: 4 }}>Los registros aparecerán aquí.</div>
           </div>
-        ) : (
+        )}
+        {!cargando && !error && lista.length > 0 && (
           <>
             <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Últimos registros</div>
             {[...lista].reverse().map((r, i) => {
@@ -709,13 +766,13 @@ function ResumenScreen({ registros }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
                       <span style={{ color: cf.accent, fontWeight: 700, fontSize: 13 }}>{r.tipo}</span>
-                      <span style={{ color: C.textDim, fontSize: 11 }}>{r.hora}</span>
+                      <span style={{ color: C.textDim, fontSize: 11 }}>{r.hora || ""}</span>
                     </div>
                     <div style={{ color: C.text, fontSize: 12, marginBottom: 2 }}>
                       {r.equipo || "—"} · {r.sector || "—"}
                     </div>
                     <div style={{ color: C.textMuted, fontSize: 11 }}>
-                      {r.usuario.split(" ")[0]}
+                      {(r.trabajador || r.usuario || "—").split(" ")[0]}
                       {r.tipo === "Humedad" && r.hileras ? ` · ${r.hileras} hilera${r.hileras > 1 ? "s" : ""}` : ""}
                     </div>
                   </div>
