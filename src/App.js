@@ -695,7 +695,14 @@ function ResumenScreen() {
   const hoy = new Date().toISOString().split("T")[0];
   const listaHoy = lista.filter(r => {
     if (!r.fecha) return false;
-    return String(r.fecha).substring(0, 10) === hoy;
+    try {
+      const fechaStr = String(r.fecha);
+      // Intentar parsear la fecha y comparar
+      const fechaReg = new Date(fechaStr).toISOString().split("T")[0];
+      return fechaReg === hoy;
+    } catch(e) {
+      return String(r.fecha).substring(0, 10) === hoy;
+    }
   });
 
   const porTipo = { Goteo: [], Drenaje: [], Humedad: [] };
