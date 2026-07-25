@@ -667,14 +667,24 @@ function ResumenScreen() {
     setCargando(true);
     setError(false);
     try {
-      const res = await fetch("https://api.allorigins.win/get?url=" + encodeURIComponent(SHEETS_URL));
-      const json = await res.json();
-      const data = JSON.parse(json.contents);
+      // Directo sin proxy — igual que el dashboard
+      const res = await fetch(SHEETS_URL, { method: "GET", redirect: "follow" });
+      const text = await res.text();
+      const data = JSON.parse(text);
       if (data.status === "ok") setLista(Array.isArray(data.registros) ? data.registros : []);
       else setLista([]);
     } catch(e) {
-      setLista([]);
-      setError(true);
+      // Fallback con proxy
+      try {
+        const res2 = await fetch("https://api.allorigins.win/get?url=" + encodeURIComponent(SHEETS_URL));
+        const json = await res2.json();
+        const data2 = JSON.parse(json.contents);
+        if (data2.status === "ok") setLista(Array.isArray(data2.registros) ? data2.registros : []);
+        else setLista([]);
+      } catch(e2) {
+        setLista([]);
+        setError(true);
+      }
     }
     setCargando(false);
   };
