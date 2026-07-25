@@ -454,7 +454,7 @@ function MenuScreen({ user, onSelect, onLogout }) {
 
         <div style={{ ...S.divider, marginTop: 4 }} />
         <button onClick={() => window.location.reload(true)} style={{
-          background: "transparent", border: `1px solid ${C.border}`,
+          background: "transparent", border: "1px solid #243d27",
           borderRadius: 10, padding: "10px", color: C.textMuted,
           fontSize: 12, fontWeight: 600, cursor: "pointer", width: "100%",
         }}>🔄 Actualizar app</button>
