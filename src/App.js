@@ -691,10 +691,19 @@ function ResumenScreen() {
 
   useEffect(() => { cargarRegistros(); }, []); // eslint-disable-line
 
+  // Filtrar solo registros de hoy
+  const hoy = new Date().toISOString().split("T")[0];
+  const listaHoy = lista.filter(r => {
+    if (!r.fecha) return false;
+    return String(r.fecha).substring(0, 10) === hoy;
+  });
+
   const porTipo = { Goteo: [], Drenaje: [], Humedad: [] };
-  lista.forEach(r => {
+  listaHoy.forEach(r => {
     try { if (r && r.tipo && porTipo[r.tipo]) porTipo[r.tipo].push(r); } catch(e) {}
   });
+
+  const ultFecha = lista.length > 0 ? String(lista[lista.length - 1].fecha).substring(0, 10) : null;
 
   const config = {
     Goteo:   { icon: "💧", accent: C.accent,  dim: C.accentDim,  text: C.accentText },
@@ -707,8 +716,9 @@ function ResumenScreen() {
       <StatusBar />
       <div style={S.header()}>
         <div style={S.headerTitle}>◈ Resumen del día</div>
-        <div style={{ color: C.textMuted, fontSize: 11 }}>
-          {new Date().toLocaleDateString("es-CL", { day: "numeric", month: "short" })}
+        <div style={{ color: C.textMuted, fontSize: 11, textAlign: "right" }}>
+          <div>{new Date().toLocaleDateString("es-CL", { day: "numeric", month: "short" })}</div>
+          {ultFecha && <div style={{ fontSize: 10, marginTop: 2 }}>Últ. reg: {ultFecha}</div>}
         </div>
       </div>
 
@@ -756,17 +766,17 @@ function ResumenScreen() {
         </div>
         )}
 
-         {!cargando && !error && lista.length === 0 && (
+         {!cargando && !error && listaHoy.length === 0 && (
           <div style={{ ...S.card, textAlign: "center", padding: "32px 16px" }}>
             <div style={{ fontSize: 36, marginBottom: 10 }}>📋</div>
             <div style={{ color: C.textMuted, fontSize: 13 }}>No hay registros hoy.</div>
             <div style={{ color: C.textDim, fontSize: 11, marginTop: 4 }}>Los registros aparecerán aquí.</div>
           </div>
         )}
-        {!cargando && !error && lista.length > 0 && (
+        {!cargando && !error && listaHoy.length > 0 && (
           <>
             <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Últimos registros</div>
-            {[...lista].reverse().map((r, i) => {
+            {[...listaHoy].reverse().map((r, i) => {
               const cf = config[r.tipo] || config["Goteo"];
               return (
                 <div key={i} style={{ ...S.card, display: "flex", alignItems: "flex-start", gap: 12 }}>
