@@ -453,8 +453,13 @@ function MenuScreen({ user, onSelect, onLogout }) {
         ))}
 
         <div style={{ ...S.divider, marginTop: 4 }} />
+        <button onClick={() => window.location.reload(true)} style={{
+          background: "transparent", border: `1px solid ${C.border}`,
+          borderRadius: 10, padding: "10px", color: C.textMuted,
+          fontSize: 12, fontWeight: 600, cursor: "pointer", width: "100%",
+        }}>🔄 Actualizar app</button>
         <div style={{ color: C.textDim, fontSize: 10, textAlign: "center" }}>
-          AgroMonitor · Datos sincronizados con SharePoint
+          AgroMonitor · Datos sincronizados con Google Sheets
         </div>
       </div>
     </>
@@ -466,10 +471,9 @@ function GoteoScreen({ onBack, user, onGuardar }) {
   const [common, setCommon] = useState({ fecha: fechaHoy(), equipo: "", sector: "" });
   const [med, setMed] = useState({});
   const [toast, setToast] = useState(false);
+  const [err, setErr] = useState("");
 
   const handleCommon = (k, v) => setCommon(p => ({ ...p, [k]: v, ...(k === "equipo" ? { sector: "" } : {}) }));
-
-  const [err, setErr] = useState("");
 
   const enviar = async () => {
     if (!common.equipo) { setErr("Debes seleccionar un equipo."); return; }
@@ -514,10 +518,9 @@ function DrenajeScreen({ onBack, user, onGuardar }) {
   const [common, setCommon] = useState({ fecha: fechaHoy(), equipo: "", sector: "" });
   const [med, setMed] = useState({});
   const [toast, setToast] = useState(false);
+  const [err, setErr] = useState("");
 
   const handleCommon = (k, v) => setCommon(p => ({ ...p, [k]: v, ...(k === "equipo" ? { sector: "" } : {}) }));
-
-  const [err, setErr] = useState("");
 
   const enviar = async () => {
     if (!common.equipo) { setErr("Debes seleccionar un equipo."); return; }
@@ -562,13 +565,12 @@ function HumedadScreen({ onBack, user, onGuardar }) {
   const [common, setCommon] = useState({ fecha: fechaHoy(), equipo: "", sector: "" });
   const [hileras, setHileras] = useState([{ id: 1, hi: "", hm: "", hf: "" }]);
   const [toast, setToast] = useState(false);
+  const [err, setErr] = useState("");
 
   const handleCommon = (k, v) => setCommon(p => ({ ...p, [k]: v, ...(k === "equipo" ? { sector: "" } : {}) }));
   const updateH = (id, key, val) => setHileras(hs => hs.map(h => h.id === id ? { ...h, [key]: val } : h));
   const addH = () => { if (hileras.length < 6) setHileras(hs => [...hs, { id: hs.length + 1, hi: "", hm: "", hf: "" }]); };
   const removeH = (id) => { if (hileras.length > 1) setHileras(hs => hs.filter(h => h.id !== id).map((h, i) => ({ ...h, id: i + 1 }))); };
-
-  const [err, setErr] = useState("");
 
   const enviar = async () => {
     if (!common.equipo) { setErr("Debes seleccionar un equipo."); return; }
