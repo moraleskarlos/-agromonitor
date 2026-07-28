@@ -1,13 +1,11 @@
 import { useState, useEffect } from "react";
-
-// ── DATOS REALES ────────────────────────────────────────────────────────────
-const USUARIOS = [
-  { nombre: "Niger Leyton Leyton", pin: "1111" },
-  { nombre: "Macarena González Dossi", pin: "2222" },
-  { nombre: "Pablo Gómez Torres", pin: "3333" },
-  { nombre: "Nibaldo Hidalgo Rosales", pin: "4444" },
-  { nombre: "María Magdalena Spoerer", pin: "5555" },
-];
+import { auth, db, DOMINIO_LOGIN } from "./firebase";
+import {
+  signInWithEmailAndPassword, onAuthStateChanged, signOut
+} from "firebase/auth";
+import {
+  collection, addDoc, getDocs, doc, getDoc, serverTimestamp
+} from "firebase/firestore";
 
 const EQUIPOS = {
   "Equipo 3 FRU": [
@@ -231,20 +229,13 @@ const S = {
   }),
 };
 
-// ── URL GOOGLE SHEETS ───────────────────────────────────────────────────────
-const SHEETS_URL = "https://script.google.com/macros/s/AKfycbydce4hOCVAFuxP5KHtxutF0sPW7M9zdElCPKUzcLZRmkhkvkNxrhowhkIAdClhPBHI/exec";
-
-async function enviarASheets(data) {
+// ── ENVIAR A FIRESTORE ──────────────────────────────────────────────────────
+async function enviarAFirestore(data) {
   try {
-    await fetch(SHEETS_URL, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
+    await addDoc(collection(db, "mediciones"), { ...data, creado_en: serverTimestamp() });
     return true;
   } catch (e) {
-    console.error("Error enviando a Sheets:", e);
+    console.error("Error enviando a Firestore:", e);
     return false;
   }
 }
@@ -344,18 +335,25 @@ function MedicionFields({ data, onChange }) {
 }
 
 // ── PANTALLA LOGIN ──────────────────────────────────────────────────────────
-function LoginScreen({ onLogin }) {
+function LoginScreen() {
   const [usuario, setUsuario] = useState("");
-  const [pin, setPin] = useState("");
+  const [clave, setClave] = useState("");
   const [error, setError] = useState("");
+  const [cargando, setCargando] = useState(false);
 
-  const ingresar = () => {
-    const u = USUARIOS.find(u => u.nombre === usuario);
-    if (!u) { setError("Selecciona tu nombre."); return; }
-    if (pin.length < 4) { setError("Ingresa tu PIN de 4 dígitos."); return; }
-    if (u.pin !== pin) { setError("PIN incorrecto. Intenta de nuevo."); return; }
+  const ingresar = async () => {
+    if (!usuario.trim()) { setError("Ingresa tu usuario."); return; }
+    if (!clave) { setError("Ingresa tu contraseña."); return; }
     setError("");
-    onLogin(usuario);
+    setCargando(true);
+    const email = usuario.includes("@") ? usuario.trim() : `${usuario.trim()}@${DOMINIO_LOGIN}`;
+    try {
+      await signInWithEmailAndPassword(auth, email, clave);
+      // onAuthStateChanged en App() se encarga de avanzar a la app
+    } catch (e) {
+      setError("Usuario o contraseña incorrectos.");
+    }
+    setCargando(false);
   };
 
   return (
@@ -378,23 +376,23 @@ function LoginScreen({ onLogin }) {
           </div>
         </div>
 
-        <FieldGroup label="Trabajador">
-          <select style={S.select} value={usuario} onChange={e => setUsuario(e.target.value)}>
-            <option value="">Selecciona tu nombre</option>
-            {USUARIOS.map(u => <option key={u.nombre}>{u.nombre}</option>)}
-          </select>
+        <FieldGroup label="Usuario">
+          <input style={S.input} type="text" autoCapitalize="none" autoCorrect="off"
+            placeholder="ej: juan.perez" value={usuario}
+            onChange={e => setUsuario(e.target.value)} />
         </FieldGroup>
 
-        <FieldGroup label="PIN">
-          <input style={S.input} type="password" inputMode="numeric" maxLength={4}
-            placeholder="● ● ● ●" value={pin}
-            onChange={e => setPin(e.target.value.replace(/\D/g, ""))}
+        <FieldGroup label="Contraseña">
+          <input style={S.input} type="password" value={clave}
+            onChange={e => setClave(e.target.value)}
             onKeyDown={e => e.key === "Enter" && ingresar()} />
         </FieldGroup>
 
         {error && <div style={{ color: C.error, fontSize: 12, textAlign: "center" }}>{error}</div>}
 
-        <button style={S.btn()} onClick={ingresar}>Ingresar</button>
+        <button style={S.btn()} onClick={ingresar} disabled={cargando}>
+          {cargando ? "Ingresando..." : "Ingresar"}
+        </button>
 
         <div style={{ color: C.textDim, fontSize: 11, textAlign: "center", marginTop: 4 }}>
           ¿Problemas para ingresar? Contacta a administración.
@@ -459,7 +457,7 @@ function MenuScreen({ user, onSelect, onLogout }) {
           fontSize: 12, fontWeight: 600, cursor: "pointer", width: "100%",
         }}>🔄 Actualizar app</button>
         <div style={{ color: C.textDim, fontSize: 10, textAlign: "center" }}>
-          AgroMonitor · Datos sincronizados con Google Sheets
+          AgroMonitor · Datos sincronizados en la nube
         </div>
       </div>
     </>
@@ -467,7 +465,7 @@ function MenuScreen({ user, onSelect, onLogout }) {
 }
 
 // ── FORMULARIO GOTEO ────────────────────────────────────────────────────────
-function GoteoScreen({ onBack, user, onGuardar }) {
+function GoteoScreen({ onBack, uid, nombre, onGuardar }) {
   const [common, setCommon] = useState({ fecha: fechaHoy(), equipo: "", sector: "" });
   const [med, setMed] = useState({});
   const [toast, setToast] = useState(false);
@@ -480,13 +478,13 @@ function GoteoScreen({ onBack, user, onGuardar }) {
     if (!common.sector) { setErr("Debes seleccionar un sector."); return; }
     setErr("");
     const payload = {
-      tipo: "Goteo", trabajador: user, fecha: common.fecha,
+      tipo: "Goteo", trabajador_uid: uid, trabajador_nombre: nombre, fecha: new Date(common.fecha),
       equipo: common.equipo, sector: common.sector,
       pH: med.pH || "", CE: med.CE || "", Nitratos: med.Nitratos || "",
       Potasio: med.Potasio || "", Calcio: med.Calcio || "", Sodio: med.Sodio || ""
     };
-    onGuardar({ ...payload, hora: horaActual() });
-    await enviarASheets(payload);
+    onGuardar({ ...payload, trabajador: nombre, fecha: common.fecha, hora: horaActual() });
+    await enviarAFirestore(payload);
     setToast(true);
     setTimeout(() => { setToast(false); setMed({}); setCommon({ fecha: fechaHoy(), equipo: "", sector: "" }); }, 2200);
   };
@@ -497,7 +495,7 @@ function GoteoScreen({ onBack, user, onGuardar }) {
       <div style={S.header("#0e3d1a")}>
         <BackBtn onBack={onBack} />
         <div style={S.headerTitle}>💧 Registro de Goteo</div>
-        <div style={S.tag(C.accentDim, C.accentText)}>{user.split(" ")[0]}</div>
+        <div style={S.tag(C.accentDim, C.accentText)}>{nombre.split(" ")[0]}</div>
       </div>
       <div style={S.body}>
         <CommonFields data={common} onChange={handleCommon} />
@@ -514,7 +512,7 @@ function GoteoScreen({ onBack, user, onGuardar }) {
 }
 
 // ── FORMULARIO DRENAJE ──────────────────────────────────────────────────────
-function DrenajeScreen({ onBack, user, onGuardar }) {
+function DrenajeScreen({ onBack, uid, nombre, onGuardar }) {
   const [common, setCommon] = useState({ fecha: fechaHoy(), equipo: "", sector: "" });
   const [med, setMed] = useState({});
   const [toast, setToast] = useState(false);
@@ -527,13 +525,13 @@ function DrenajeScreen({ onBack, user, onGuardar }) {
     if (!common.sector) { setErr("Debes seleccionar un sector."); return; }
     setErr("");
     const payload = {
-      tipo: "Drenaje", trabajador: user, fecha: common.fecha,
+      tipo: "Drenaje", trabajador_uid: uid, trabajador_nombre: nombre, fecha: new Date(common.fecha),
       equipo: common.equipo, sector: common.sector,
       pH: med.pH || "", CE: med.CE || "", Nitratos: med.Nitratos || "",
       Potasio: med.Potasio || "", Calcio: med.Calcio || "", Sodio: med.Sodio || ""
     };
-    onGuardar({ ...payload, hora: horaActual() });
-    await enviarASheets(payload);
+    onGuardar({ ...payload, trabajador: nombre, fecha: common.fecha, hora: horaActual() });
+    await enviarAFirestore(payload);
     setToast(true);
     setTimeout(() => { setToast(false); setMed({}); setCommon({ fecha: fechaHoy(), equipo: "", sector: "" }); }, 2200);
   };
@@ -544,7 +542,7 @@ function DrenajeScreen({ onBack, user, onGuardar }) {
       <div style={S.header("#1a0e38")}>
         <BackBtn onBack={onBack} />
         <div style={S.headerTitle}>🚿 Registro de Drenaje</div>
-        <div style={S.tag(C.purpleDim, C.purpleText)}>{user.split(" ")[0]}</div>
+        <div style={S.tag(C.purpleDim, C.purpleText)}>{nombre.split(" ")[0]}</div>
       </div>
       <div style={S.body}>
         <CommonFields data={common} onChange={handleCommon} />
@@ -561,7 +559,7 @@ function DrenajeScreen({ onBack, user, onGuardar }) {
 }
 
 // ── FORMULARIO HUMEDAD ──────────────────────────────────────────────────────
-function HumedadScreen({ onBack, user, onGuardar }) {
+function HumedadScreen({ onBack, uid, nombre, onGuardar }) {
   const [common, setCommon] = useState({ fecha: fechaHoy(), equipo: "", sector: "" });
   const [hileras, setHileras] = useState([{ id: 1, hi: "", hm: "", hf: "" }]);
   const [toast, setToast] = useState(false);
@@ -576,16 +574,16 @@ function HumedadScreen({ onBack, user, onGuardar }) {
     if (!common.equipo) { setErr("Debes seleccionar un equipo."); return; }
     if (!common.sector) { setErr("Debes seleccionar un sector."); return; }
     setErr("");
-    // Enviar cada hilera como fila separada en Google Sheets
+    // Enviar cada hilera como documento separado en Firestore
     for (const h of hileras) {
       const payload = {
-        tipo: "Humedad", trabajador: user, fecha: common.fecha,
+        tipo: "Humedad", trabajador_uid: uid, trabajador_nombre: nombre, fecha: new Date(common.fecha),
         equipo: common.equipo, sector: common.sector,
         hilera: h.id, humedad_inicial: h.hi, humedad_media: h.hm, humedad_final: h.hf
       };
-      await enviarASheets(payload);
+      await enviarAFirestore(payload);
     }
-    onGuardar({ tipo: "Humedad", usuario: user, hora: horaActual(), ...common, hileras: hileras.length });
+    onGuardar({ tipo: "Humedad", trabajador: nombre, hora: horaActual(), ...common, hileras: hileras.length });
     setToast(true);
     setTimeout(() => {
       setToast(false);
@@ -600,7 +598,7 @@ function HumedadScreen({ onBack, user, onGuardar }) {
       <div style={S.header("#1e2a0a")}>
         <BackBtn onBack={onBack} />
         <div style={S.headerTitle}>🌱 Registro de Humedad</div>
-        <div style={S.tag(C.yellowDim, C.yellowText)}>{user.split(" ")[0]}</div>
+        <div style={S.tag(C.yellowDim, C.yellowText)}>{nombre.split(" ")[0]}</div>
       </div>
       <div style={S.body}>
         <CommonFields data={common} onChange={handleCommon} />
@@ -667,24 +665,23 @@ function ResumenScreen() {
     setCargando(true);
     setError(false);
     try {
-      // Directo sin proxy — igual que el dashboard
-      const res = await fetch(SHEETS_URL, { method: "GET", redirect: "follow" });
-      const text = await res.text();
-      const data = JSON.parse(text);
-      if (data.status === "ok") setLista(Array.isArray(data.registros) ? data.registros : []);
-      else setLista([]);
-    } catch(e) {
-      // Fallback con proxy
-      try {
-        const res2 = await fetch("https://api.allorigins.win/get?url=" + encodeURIComponent(SHEETS_URL));
-        const json = await res2.json();
-        const data2 = JSON.parse(json.contents);
-        if (data2.status === "ok") setLista(Array.isArray(data2.registros) ? data2.registros : []);
-        else setLista([]);
-      } catch(e2) {
-        setLista([]);
-        setError(true);
-      }
+      const snap = await getDocs(collection(db, "mediciones"));
+      const regs = snap.docs.map(d => {
+        const r = d.data();
+        const fechaJS = r.fecha && r.fecha.toDate ? r.fecha.toDate() : new Date(r.fecha);
+        const creadoJS = r.creado_en && r.creado_en.toDate ? r.creado_en.toDate() : null;
+        return {
+          ...r,
+          trabajador: r.trabajador_nombre || "",
+          fecha: fechaJS.toISOString().split("T")[0],
+          hora: creadoJS ? creadoJS.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }) : (r.hora || ""),
+        };
+      });
+      setLista(regs);
+    } catch (e) {
+      console.error("Error cargando registros:", e);
+      setLista([]);
+      setError(true);
     }
     setCargando(false);
   };
@@ -819,20 +816,54 @@ function ResumenScreen() {
 export default function App() {
   const [screen, setScreen] = useState("login");
   const [tab, setTab] = useState("menu");
-  const [user, setUser] = useState("");
+  const [authUser, setAuthUser] = useState(null);
+  const [nombre, setNombre] = useState("");
+  const [authLoading, setAuthLoading] = useState(true);
   const [registros, setRegistros] = useState([]);
 
-  const login = (u) => { setUser(u); setScreen("app"); };
-  const logout = () => { setUser(""); setScreen("login"); setTab("menu"); };
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      setAuthUser(u);
+      if (u) {
+        try {
+          const perfilSnap = await getDoc(doc(db, "usuarios", u.uid));
+          setNombre(perfilSnap.exists() ? (perfilSnap.data().nombre || "") : "");
+        } catch (e) {
+          setNombre("");
+        }
+        setScreen("app");
+        setTab("menu");
+      } else {
+        setNombre("");
+        setScreen("login");
+        setTab("menu");
+      }
+      setAuthLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const logout = () => { signOut(auth); };
   const guardar = (r) => setRegistros(p => [...p, r]);
 
-  const handleTab = (t) => { setTab(t); if (screen !== "app") return; };
+  if (authLoading) {
+    return (
+      <div style={S.wrap}>
+        <div style={S.phone}>
+          <StatusBar />
+          <div style={{ ...S.body, justifyContent: "center", alignItems: "center" }}>
+            <div style={{ color: C.textMuted, fontSize: 13 }}>Cargando...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (screen === "login") {
     return (
       <div style={S.wrap}>
         <div style={S.phone}>
-          <LoginScreen onLogin={login} />
+          <LoginScreen />
         </div>
       </div>
     );
@@ -841,25 +872,26 @@ export default function App() {
   // Subpantallas dentro de "app"
   const subScreens = ["goteo", "drenaje", "humedad"];
   const enFormulario = subScreens.includes(screen);
+  const uid = authUser ? authUser.uid : null;
 
   return (
     <div style={S.wrap}>
       <div style={S.phone}>
         {/* Contenido principal */}
         {screen === "app" && tab === "menu" && (
-          <MenuScreen user={user} onSelect={s => setScreen(s)} onLogout={logout} />
+          <MenuScreen user={nombre} onSelect={s => setScreen(s)} onLogout={logout} />
         )}
         {screen === "app" && tab === "resumen" && (
           <ResumenScreen registros={registros} />
         )}
         {screen === "goteo" && (
-          <GoteoScreen onBack={() => setScreen("app")} user={user} onGuardar={guardar} />
+          <GoteoScreen onBack={() => setScreen("app")} uid={uid} nombre={nombre} onGuardar={guardar} />
         )}
         {screen === "drenaje" && (
-          <DrenajeScreen onBack={() => setScreen("app")} user={user} onGuardar={guardar} />
+          <DrenajeScreen onBack={() => setScreen("app")} uid={uid} nombre={nombre} onGuardar={guardar} />
         )}
         {screen === "humedad" && (
-          <HumedadScreen onBack={() => setScreen("app")} user={user} onGuardar={guardar} />
+          <HumedadScreen onBack={() => setScreen("app")} uid={uid} nombre={nombre} onGuardar={guardar} />
         )}
 
         {/* Navbar (solo cuando no estás en formulario) */}
