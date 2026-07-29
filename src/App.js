@@ -46,6 +46,9 @@ const C = {
   yellow:       "#f5c842",
   yellowDim:    "#f5c84233",
   yellowText:   "#fde68a",
+  blue:         "#4aa8e8",
+  blueDim:      "#4aa8e833",
+  blueText:     "#a8d8f5",
   text:         "#e4f0e6",
   textMuted:    "#6b9470",
   textDim:      "#4a6b4e",
@@ -330,6 +333,7 @@ const LIMITES = {
   Sodio:    { min: 0, max: 2000 },
 };
 const LIMITE_HUMEDAD = { min: 0, max: 100 };
+const LIMITE_PCT_DRENAJE = { min: 0, max: 100 };
 
 function validarMedicion(med) {
   for (const campo of Object.keys(LIMITES)) {
@@ -447,6 +451,7 @@ function MenuScreen({ user, onSelect, onLogout }) {
     { id: "goteo",   icon: "💧", label: "Registro de Goteo",    desc: "pH · CE · Nitratos · Potasio · Calcio · Sodio", accent: C.accent,  dim: C.accentDim,  cardBg: "#0e2e18" },
     { id: "drenaje", icon: "🚿", label: "Registro de Drenaje",  desc: "pH · CE · Nitratos · Potasio · Calcio · Sodio", accent: C.purple,  dim: C.purpleDim,  cardBg: "#1a1030" },
     { id: "humedad", icon: "🌱", label: "Registro de Humedad",  desc: "6 hileras · H. Inicial · H. Media · H. Final",  accent: C.yellow,  dim: C.yellowDim,  cardBg: "#1e2a0e" },
+    { id: "pctdrenaje", icon: "📉", label: "% Drenaje", desc: "Un solo valor · porcentaje de drenaje", accent: C.blue, dim: C.blueDim, cardBg: "#0e2030" },
   ];
 
   const nombre = user.split(" ")[0];
@@ -794,6 +799,78 @@ function HumedadScreen({ onBack, uid, nombre, onGuardar }) {
   );
 }
 
+// ── FORMULARIO % DRENAJE ─────────────────────────────────────────────────────
+function PorcentajeDrenajeScreen({ onBack, uid, nombre, onGuardar }) {
+  const [common, setCommon] = useState({ fecha: fechaHoy(), equipo: "", sector: "" });
+  const [valor, setValor] = useState("");
+  const [resumen, setResumen] = useState(false);
+  const [err, setErr] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [progreso, setProgreso] = useState(0);
+
+  const handleCommon = (k, v) => setCommon(p => ({ ...p, [k]: v, ...(k === "equipo" ? { sector: "" } : {}) }));
+
+  const enviar = async () => {
+    if (enviando) return;
+    if (!common.equipo) { setErr("Debes seleccionar un equipo."); return; }
+    if (!common.sector) { setErr("Debes seleccionar un sector."); return; }
+    if (valor === "") { setErr("Ingresa el porcentaje de drenaje."); return; }
+    const num = parseFloat(valor);
+    if (isNaN(num) || num < LIMITE_PCT_DRENAJE.min || num > LIMITE_PCT_DRENAJE.max) {
+      setErr(`El valor debe estar entre ${LIMITE_PCT_DRENAJE.min} y ${LIMITE_PCT_DRENAJE.max}%.`);
+      return;
+    }
+    setErr("");
+    setEnviando(true);
+    setProgreso(15);
+    const payload = {
+      tipo: "PorcentajeDrenaje", trabajador_uid: uid, trabajador_nombre: nombre, fecha: new Date(common.fecha),
+      equipo: common.equipo, sector: common.sector, PorcentajeDrenaje: valor
+    };
+    onGuardar({ ...payload, trabajador: nombre, fecha: common.fecha, hora: horaActual() });
+    setProgreso(55);
+    await enviarAFirestore(payload);
+    setProgreso(100);
+    await new Promise(r => setTimeout(r, 300));
+    setEnviando(false);
+    setResumen(true);
+    setTimeout(() => {
+      setResumen(false);
+      setProgreso(0);
+      setValor("");
+      setCommon({ fecha: fechaHoy(), equipo: "", sector: "" });
+    }, 2600);
+  };
+
+  return (
+    <>
+      <StatusBar />
+      <div style={S.header("#0e2030")}>
+        <BackBtn onBack={onBack} />
+        <div style={S.headerTitle}>📉 % Drenaje</div>
+        <div style={S.tag(C.blueDim, C.blueText)}>{nombre.split(" ")[0]}</div>
+      </div>
+      <div style={S.body}>
+        <CommonFields data={common} onChange={handleCommon} />
+        <div style={S.divider} />
+        <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Medición</div>
+        <FieldGroup label="Porcentaje de Drenaje (%)">
+          <input style={S.input} type="number" inputMode="decimal" placeholder="0.0"
+            min={LIMITE_PCT_DRENAJE.min} max={LIMITE_PCT_DRENAJE.max}
+            value={valor} onChange={e => setValor(e.target.value)} />
+        </FieldGroup>
+        {err && <div style={{ color: C.error, fontSize: 12, textAlign: "center", padding: "4px 0" }}>{err}</div>}
+        <button style={S.btn(C.blue, "#0a1a26")} onClick={enviar} disabled={enviando}>
+          {enviando ? "Enviando..." : "✓ Enviar registro"}
+        </button>
+        <button style={S.btnGhost} onClick={onBack}>← Volver al menú</button>
+      </div>
+      <ProgressOverlay visible={enviando} progreso={progreso} titulo="Generando reporte" />
+      <ResumenEnvioToast visible={resumen} tipo="% Drenaje" cantidad={1} />
+    </>
+  );
+}
+
 // ── PANTALLA RESUMEN DEL DÍA ────────────────────────────────────────────────
 function ResumenScreen() {
   const [lista, setLista] = useState([]);
@@ -841,7 +918,7 @@ function ResumenScreen() {
     }
   });
 
-  const porTipo = { Goteo: [], Drenaje: [], Humedad: [] };
+  const porTipo = { Goteo: [], Drenaje: [], Humedad: [], PorcentajeDrenaje: [] };
   listaHoy.forEach(r => {
     try { if (r && r.tipo && porTipo[r.tipo]) porTipo[r.tipo].push(r); } catch(e) {}
   });
@@ -849,9 +926,10 @@ function ResumenScreen() {
   const ultFecha = lista.length > 0 ? String(lista[lista.length - 1].fecha).substring(0, 10) : null;
 
   const config = {
-    Goteo:   { icon: "💧", accent: C.accent,  dim: C.accentDim,  text: C.accentText },
-    Drenaje: { icon: "🚿", accent: C.purple,  dim: C.purpleDim,  text: C.purpleText },
-    Humedad: { icon: "🌱", accent: C.yellow,  dim: C.yellowDim,  text: C.yellowText },
+    Goteo:   { icon: "💧", accent: C.accent,  dim: C.accentDim,  text: C.accentText, label: "Goteo" },
+    Drenaje: { icon: "🚿", accent: C.purple,  dim: C.purpleDim,  text: C.purpleText, label: "Drenaje" },
+    Humedad: { icon: "🌱", accent: C.yellow,  dim: C.yellowDim,  text: C.yellowText, label: "Humedad" },
+    PorcentajeDrenaje: { icon: "📉", accent: C.blue, dim: C.blueDim, text: C.blueText, label: "% Drenaje" },
   };
 
   return (
@@ -893,16 +971,16 @@ function ResumenScreen() {
 
         {/* Contadores */}
         {!cargando && !error && (
-        <div style={S.grid3}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
           {Object.entries(porTipo).map(([tipo, listaT]) => {
             const cf = config[tipo];
             return (
-              <div key={tipo} style={{ ...S.card, textAlign: "center", borderColor: listaT.length > 0 ? cf.accent + "44" : C.border }}>
-                <div style={{ fontSize: 22, marginBottom: 4 }}>{cf.icon}</div>
-                <div style={{ color: listaT.length > 0 ? cf.accent : C.textDim, fontSize: 22, fontWeight: 800 }}>
+              <div key={tipo} style={{ ...S.card, textAlign: "center", padding: "10px 6px", borderColor: listaT.length > 0 ? cf.accent + "44" : C.border }}>
+                <div style={{ fontSize: 20, marginBottom: 4 }}>{cf.icon}</div>
+                <div style={{ color: listaT.length > 0 ? cf.accent : C.textDim, fontSize: 20, fontWeight: 800 }}>
                   {listaT.length}
                 </div>
-                <div style={{ color: C.textMuted, fontSize: 10, fontWeight: 600, letterSpacing: 0.5 }}>{tipo}</div>
+                <div style={{ color: C.textMuted, fontSize: 9, fontWeight: 600, letterSpacing: 0.3 }}>{cf.label}</div>
               </div>
             );
           })}
@@ -930,7 +1008,7 @@ function ResumenScreen() {
                   }}>{cf.icon}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-                      <span style={{ color: cf.accent, fontWeight: 700, fontSize: 13 }}>{r.tipo}</span>
+                      <span style={{ color: cf.accent, fontWeight: 700, fontSize: 13 }}>{cf.label}</span>
                       <span style={{ color: C.textDim, fontSize: 11 }}>{r.hora || ""}</span>
                     </div>
                     <div style={{ color: C.text, fontSize: 12, marginBottom: 2 }}>
@@ -1009,7 +1087,7 @@ export default function App() {
   }
 
   // Subpantallas dentro de "app"
-  const subScreens = ["goteo", "drenaje", "humedad"];
+  const subScreens = ["goteo", "drenaje", "humedad", "pctdrenaje"];
   const enFormulario = subScreens.includes(screen);
   const uid = authUser ? authUser.uid : null;
 
@@ -1031,6 +1109,9 @@ export default function App() {
         )}
         {screen === "humedad" && (
           <HumedadScreen onBack={() => setScreen("app")} uid={uid} nombre={nombre} onGuardar={guardar} />
+        )}
+        {screen === "pctdrenaje" && (
+          <PorcentajeDrenajeScreen onBack={() => setScreen("app")} uid={uid} nombre={nombre} onGuardar={guardar} />
         )}
 
         {/* Navbar (solo cuando no estás en formulario) */}
