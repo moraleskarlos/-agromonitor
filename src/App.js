@@ -352,7 +352,9 @@ function validarHumedad(hileras) {
   for (const h of hileras) {
     for (const campo of [["hi", "H. Inicial"], ["hm", "H. Media"], ["hf", "H. Final"]]) {
       const v = h[campo[0]];
-      if (v === undefined || v === "") continue;
+      if (v === undefined || v === "") {
+        return `Hilera ${h.id}: falta completar ${campo[1]}.`;
+      }
       const num = parseFloat(v);
       if (isNaN(num) || num < LIMITE_HUMEDAD.min || num > LIMITE_HUMEDAD.max) {
         return `Hilera ${h.id}: ${campo[1]} debe estar entre ${LIMITE_HUMEDAD.min} y ${LIMITE_HUMEDAD.max}%.`;
