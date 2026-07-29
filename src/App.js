@@ -320,6 +320,44 @@ function CommonFields({ data, onChange }) {
   );
 }
 
+// ── LÍMITES REALES (evitan errores de tipeo, no confundir con los rangos de alerta editables) ──
+const LIMITES = {
+  pH:       { min: 0, max: 14 },
+  CE:       { min: 0, max: 20 },
+  Nitratos: { min: 0, max: 2000 },
+  Potasio:  { min: 0, max: 2000 },
+  Calcio:   { min: 0, max: 2000 },
+  Sodio:    { min: 0, max: 2000 },
+};
+const LIMITE_HUMEDAD = { min: 0, max: 100 };
+
+function validarMedicion(med) {
+  for (const campo of Object.keys(LIMITES)) {
+    const v = med[campo];
+    if (v === undefined || v === "") continue; // campo vacío, no es error de rango
+    const num = parseFloat(v);
+    const { min, max } = LIMITES[campo];
+    if (isNaN(num) || num < min || num > max) {
+      return `${campo} debe estar entre ${min} y ${max}.`;
+    }
+  }
+  return null;
+}
+
+function validarHumedad(hileras) {
+  for (const h of hileras) {
+    for (const campo of [["hi", "H. Inicial"], ["hm", "H. Media"], ["hf", "H. Final"]]) {
+      const v = h[campo[0]];
+      if (v === undefined || v === "") continue;
+      const num = parseFloat(v);
+      if (isNaN(num) || num < LIMITE_HUMEDAD.min || num > LIMITE_HUMEDAD.max) {
+        return `Hilera ${h.id}: ${campo[1]} debe estar entre ${LIMITE_HUMEDAD.min} y ${LIMITE_HUMEDAD.max}%.`;
+      }
+    }
+  }
+  return null;
+}
+
 function MedicionFields({ data, onChange }) {
   const campos = ["pH", "CE", "Nitratos", "Potasio", "Calcio", "Sodio"];
   return (
@@ -327,6 +365,7 @@ function MedicionFields({ data, onChange }) {
       {campos.map(c => (
         <FieldGroup key={c} label={c}>
           <input style={S.input} type="number" inputMode="decimal" placeholder="0.00"
+            min={LIMITES[c].min} max={LIMITES[c].max}
             value={data[c] || ""} onChange={e => onChange(c, e.target.value)} />
         </FieldGroup>
       ))}
@@ -529,6 +568,8 @@ function GoteoScreen({ onBack, uid, nombre, onGuardar }) {
     if (enviando) return; // evita doble envío si tocan el botón más de una vez
     if (!common.equipo) { setErr("Debes seleccionar un equipo."); return; }
     if (!common.sector) { setErr("Debes seleccionar un sector."); return; }
+    const errRango = validarMedicion(med);
+    if (errRango) { setErr(errRango); return; }
     setErr("");
     setEnviando(true);
     setProgreso(15);
@@ -593,6 +634,8 @@ function DrenajeScreen({ onBack, uid, nombre, onGuardar }) {
     if (enviando) return;
     if (!common.equipo) { setErr("Debes seleccionar un equipo."); return; }
     if (!common.sector) { setErr("Debes seleccionar un sector."); return; }
+    const errRango = validarMedicion(med);
+    if (errRango) { setErr(errRango); return; }
     setErr("");
     setEnviando(true);
     setProgreso(15);
@@ -660,6 +703,8 @@ function HumedadScreen({ onBack, uid, nombre, onGuardar }) {
     if (enviando) return; // evita doble envío si tocan el botón mientras aún está mandando
     if (!common.equipo) { setErr("Debes seleccionar un equipo."); return; }
     if (!common.sector) { setErr("Debes seleccionar un sector."); return; }
+    const errRango = validarHumedad(hileras);
+    if (errRango) { setErr(errRango); return; }
     setErr("");
     setEnviando(true);
     setProgreso(5);
@@ -729,6 +774,7 @@ function HumedadScreen({ onBack, uid, nombre, onGuardar }) {
                 <FieldGroup key={key} label={lbl}>
                   <input style={{ ...S.input, padding: "9px 8px", fontSize: 13, textAlign: "center" }}
                     type="number" inputMode="decimal" placeholder="0.0"
+                    min={LIMITE_HUMEDAD.min} max={LIMITE_HUMEDAD.max}
                     value={h[key]} onChange={e => updateH(h.id, key, e.target.value)} />
                 </FieldGroup>
               ))}
