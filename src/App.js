@@ -464,19 +464,74 @@ function MenuScreen({ user, onSelect, onLogout }) {
   );
 }
 
+// ── OVERLAY DE PROGRESO Y RESUMEN DE ENVÍO ──────────────────────────────────
+function ProgressOverlay({ visible, progreso, titulo }) {
+  if (!visible) return null;
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 60,
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <div style={{
+        background: C.card, border: `1px solid ${C.border}`, borderRadius: 16,
+        padding: "28px 26px", width: 260, textAlign: "center",
+      }}>
+        <div style={{ fontSize: 26, marginBottom: 10 }}>📤</div>
+        <div style={{ color: C.text, fontWeight: 700, fontSize: 14, marginBottom: 16 }}>{titulo}</div>
+        <div style={{ height: 8, borderRadius: 8, background: C.border, overflow: "hidden" }}>
+          <div style={{
+            height: "100%", width: `${progreso}%`, background: C.accent,
+            borderRadius: 8, transition: "width .3s ease",
+          }} />
+        </div>
+        <div style={{ color: C.textMuted, fontSize: 12, marginTop: 8, fontWeight: 600 }}>{progreso}%</div>
+      </div>
+    </div>
+  );
+}
+
+function ResumenEnvioToast({ visible, tipo, cantidad }) {
+  if (!visible) return null;
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 60,
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <div style={{
+        background: C.card, border: `1px solid ${C.accent}55`, borderRadius: 16,
+        padding: "28px 26px", width: 280, textAlign: "center",
+      }}>
+        <div style={{ fontSize: 32, marginBottom: 10 }}>✅</div>
+        <div style={{ color: C.text, fontWeight: 800, fontSize: 15, marginBottom: 8 }}>Proceso finalizado</div>
+        <div style={{ color: C.accentText, fontSize: 13, marginBottom: 10, fontWeight: 600 }}>
+          {cantidad} reporte{cantidad > 1 ? "s" : ""} subido{cantidad > 1 ? "s" : ""} en {tipo}
+        </div>
+        <div style={{ color: C.textMuted, fontSize: 11 }}>
+          Revisá la Web o el Resumen del día para confirmarlo
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── FORMULARIO GOTEO ────────────────────────────────────────────────────────
 function GoteoScreen({ onBack, uid, nombre, onGuardar }) {
   const [common, setCommon] = useState({ fecha: fechaHoy(), equipo: "", sector: "" });
   const [med, setMed] = useState({});
-  const [toast, setToast] = useState(false);
+  const [resumen, setResumen] = useState(false);
   const [err, setErr] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [progreso, setProgreso] = useState(0);
 
   const handleCommon = (k, v) => setCommon(p => ({ ...p, [k]: v, ...(k === "equipo" ? { sector: "" } : {}) }));
 
   const enviar = async () => {
+    if (enviando) return; // evita doble envío si tocan el botón más de una vez
     if (!common.equipo) { setErr("Debes seleccionar un equipo."); return; }
     if (!common.sector) { setErr("Debes seleccionar un sector."); return; }
     setErr("");
+    setEnviando(true);
+    setProgreso(15);
     const payload = {
       tipo: "Goteo", trabajador_uid: uid, trabajador_nombre: nombre, fecha: new Date(common.fecha),
       equipo: common.equipo, sector: common.sector,
@@ -484,9 +539,18 @@ function GoteoScreen({ onBack, uid, nombre, onGuardar }) {
       Potasio: med.Potasio || "", Calcio: med.Calcio || "", Sodio: med.Sodio || ""
     };
     onGuardar({ ...payload, trabajador: nombre, fecha: common.fecha, hora: horaActual() });
+    setProgreso(55);
     await enviarAFirestore(payload);
-    setToast(true);
-    setTimeout(() => { setToast(false); setMed({}); setCommon({ fecha: fechaHoy(), equipo: "", sector: "" }); }, 2200);
+    setProgreso(100);
+    await new Promise(r => setTimeout(r, 300));
+    setEnviando(false);
+    setResumen(true);
+    setTimeout(() => {
+      setResumen(false);
+      setProgreso(0);
+      setMed({});
+      setCommon({ fecha: fechaHoy(), equipo: "", sector: "" });
+    }, 2600);
   };
 
   return (
@@ -503,10 +567,13 @@ function GoteoScreen({ onBack, uid, nombre, onGuardar }) {
         <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Mediciones</div>
         <MedicionFields data={med} onChange={(k, v) => setMed(p => ({ ...p, [k]: v }))} />
         {err && <div style={{ color: C.error, fontSize: 12, textAlign: "center", padding: "4px 0" }}>{err}</div>}
-        <button style={S.btn(C.accent, C.bg)} onClick={enviar}>✓ Enviar registro</button>
+        <button style={S.btn(C.accent, C.bg)} onClick={enviar} disabled={enviando}>
+          {enviando ? "Enviando..." : "✓ Enviar registro"}
+        </button>
         <button style={S.btnGhost} onClick={onBack}>← Volver al menú</button>
       </div>
-      {toast && <div style={S.toast(C.accent, C.bg)}>✓ Registro de Goteo enviado</div>}
+      <ProgressOverlay visible={enviando} progreso={progreso} titulo="Generando reporte" />
+      <ResumenEnvioToast visible={resumen} tipo="Goteo" cantidad={1} />
     </>
   );
 }
@@ -515,15 +582,20 @@ function GoteoScreen({ onBack, uid, nombre, onGuardar }) {
 function DrenajeScreen({ onBack, uid, nombre, onGuardar }) {
   const [common, setCommon] = useState({ fecha: fechaHoy(), equipo: "", sector: "" });
   const [med, setMed] = useState({});
-  const [toast, setToast] = useState(false);
+  const [resumen, setResumen] = useState(false);
   const [err, setErr] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [progreso, setProgreso] = useState(0);
 
   const handleCommon = (k, v) => setCommon(p => ({ ...p, [k]: v, ...(k === "equipo" ? { sector: "" } : {}) }));
 
   const enviar = async () => {
+    if (enviando) return;
     if (!common.equipo) { setErr("Debes seleccionar un equipo."); return; }
     if (!common.sector) { setErr("Debes seleccionar un sector."); return; }
     setErr("");
+    setEnviando(true);
+    setProgreso(15);
     const payload = {
       tipo: "Drenaje", trabajador_uid: uid, trabajador_nombre: nombre, fecha: new Date(common.fecha),
       equipo: common.equipo, sector: common.sector,
@@ -531,9 +603,18 @@ function DrenajeScreen({ onBack, uid, nombre, onGuardar }) {
       Potasio: med.Potasio || "", Calcio: med.Calcio || "", Sodio: med.Sodio || ""
     };
     onGuardar({ ...payload, trabajador: nombre, fecha: common.fecha, hora: horaActual() });
+    setProgreso(55);
     await enviarAFirestore(payload);
-    setToast(true);
-    setTimeout(() => { setToast(false); setMed({}); setCommon({ fecha: fechaHoy(), equipo: "", sector: "" }); }, 2200);
+    setProgreso(100);
+    await new Promise(r => setTimeout(r, 300));
+    setEnviando(false);
+    setResumen(true);
+    setTimeout(() => {
+      setResumen(false);
+      setProgreso(0);
+      setMed({});
+      setCommon({ fecha: fechaHoy(), equipo: "", sector: "" });
+    }, 2600);
   };
 
   return (
@@ -550,10 +631,13 @@ function DrenajeScreen({ onBack, uid, nombre, onGuardar }) {
         <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Mediciones</div>
         <MedicionFields data={med} onChange={(k, v) => setMed(p => ({ ...p, [k]: v }))} />
         {err && <div style={{ color: C.error, fontSize: 12, textAlign: "center", padding: "4px 0" }}>{err}</div>}
-        <button style={S.btn(C.purple, C.white)} onClick={enviar}>✓ Enviar registro</button>
+        <button style={S.btn(C.purple, C.white)} onClick={enviar} disabled={enviando}>
+          {enviando ? "Enviando..." : "✓ Enviar registro"}
+        </button>
         <button style={S.btnGhost} onClick={onBack}>← Volver al menú</button>
       </div>
-      {toast && <div style={S.toast(C.purple, C.white)}>✓ Registro de Drenaje enviado</div>}
+      <ProgressOverlay visible={enviando} progreso={progreso} titulo="Generando reporte" />
+      <ResumenEnvioToast visible={resumen} tipo="Drenaje" cantidad={1} />
     </>
   );
 }
@@ -562,8 +646,10 @@ function DrenajeScreen({ onBack, uid, nombre, onGuardar }) {
 function HumedadScreen({ onBack, uid, nombre, onGuardar }) {
   const [common, setCommon] = useState({ fecha: fechaHoy(), equipo: "", sector: "" });
   const [hileras, setHileras] = useState([{ id: 1, hi: "", hm: "", hf: "" }]);
-  const [toast, setToast] = useState(false);
+  const [resumen, setResumen] = useState(false);
   const [err, setErr] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [progreso, setProgreso] = useState(0);
 
   const handleCommon = (k, v) => setCommon(p => ({ ...p, [k]: v, ...(k === "equipo" ? { sector: "" } : {}) }));
   const updateH = (id, key, val) => setHileras(hs => hs.map(h => h.id === id ? { ...h, [key]: val } : h));
@@ -571,25 +657,35 @@ function HumedadScreen({ onBack, uid, nombre, onGuardar }) {
   const removeH = (id) => { if (hileras.length > 1) setHileras(hs => hs.filter(h => h.id !== id).map((h, i) => ({ ...h, id: i + 1 }))); };
 
   const enviar = async () => {
+    if (enviando) return; // evita doble envío si tocan el botón mientras aún está mandando
     if (!common.equipo) { setErr("Debes seleccionar un equipo."); return; }
     if (!common.sector) { setErr("Debes seleccionar un sector."); return; }
     setErr("");
-    // Enviar cada hilera como documento separado en Firestore
-    for (const h of hileras) {
-      const payload = {
-        tipo: "Humedad", trabajador_uid: uid, trabajador_nombre: nombre, fecha: new Date(common.fecha),
-        equipo: common.equipo, sector: common.sector,
-        hilera: h.id, humedad_inicial: h.hi, humedad_media: h.hm, humedad_final: h.hf
-      };
-      await enviarAFirestore(payload);
-    }
+    setEnviando(true);
+    setProgreso(5);
+    // Enviar todas las hileras en paralelo, actualizando el progreso a medida que cada una confirma
+    const total = hileras.length;
+    let completadas = 0;
+    const payloads = hileras.map(h => ({
+      tipo: "Humedad", trabajador_uid: uid, trabajador_nombre: nombre, fecha: new Date(common.fecha),
+      equipo: common.equipo, sector: common.sector,
+      hilera: h.id, humedad_inicial: h.hi, humedad_media: h.hm, humedad_final: h.hf
+    }));
+    await Promise.all(payloads.map(p => enviarAFirestore(p).then(() => {
+      completadas += 1;
+      setProgreso(Math.max(5, Math.round((completadas / total) * 100)));
+    })));
     onGuardar({ tipo: "Humedad", trabajador: nombre, hora: horaActual(), ...common, hileras: hileras.length });
-    setToast(true);
+    setProgreso(100);
+    await new Promise(r => setTimeout(r, 300));
+    setEnviando(false);
+    setResumen(true);
     setTimeout(() => {
-      setToast(false);
+      setResumen(false);
+      setProgreso(0);
       setHileras([{ id: 1, hi: "", hm: "", hf: "" }]);
       setCommon({ fecha: fechaHoy(), equipo: "", sector: "" });
-    }, 2200);
+    }, 2600);
   };
 
   return (
@@ -641,16 +737,13 @@ function HumedadScreen({ onBack, uid, nombre, onGuardar }) {
         ))}
 
         {err && <div style={{ color: C.error, fontSize: 12, textAlign: "center", padding: "4px 0" }}>{err}</div>}
-        <button style={S.btn(C.yellow, "#1a2a08")} onClick={enviar}>
-          ✓ Enviar {hileras.length} hilera{hileras.length > 1 ? "s" : ""}
+        <button style={S.btn(C.yellow, "#1a2a08")} onClick={enviar} disabled={enviando}>
+          {enviando ? "Enviando..." : `✓ Enviar ${hileras.length} hilera${hileras.length > 1 ? "s" : ""}`}
         </button>
         <button style={S.btnGhost} onClick={onBack}>← Volver al menú</button>
       </div>
-      {toast && (
-        <div style={S.toast(C.yellow, "#1a2a08")}>
-          ✓ {hileras.length} hilera{hileras.length > 1 ? "s" : ""} registrada{hileras.length > 1 ? "s" : ""}
-        </div>
-      )}
+      <ProgressOverlay visible={enviando} progreso={progreso} titulo="Generando reporte" />
+      <ResumenEnvioToast visible={resumen} tipo="Humedad" cantidad={hileras.length} />
     </>
   );
 }
