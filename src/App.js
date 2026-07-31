@@ -414,7 +414,7 @@ function LoginScreen() {
             fontSize: 34, margin: "0 auto 14px", boxShadow: `0 8px 24px ${C.accentDim}`,
           }}>🌿</div>
           <div style={{ color: C.text, fontSize: 24, fontWeight: 800, letterSpacing: -0.5 }}>
-            AgroMonitor
+            FertiMonitor
           </div>
           <div style={{ color: C.textMuted, fontSize: 12, marginTop: 4 }}>
             Sistema de registro de campo
@@ -503,7 +503,7 @@ function MenuScreen({ user, onSelect, onLogout }) {
           fontSize: 12, fontWeight: 600, cursor: "pointer", width: "100%",
         }}>🔄 Actualizar app</button>
         <div style={{ color: C.textDim, fontSize: 10, textAlign: "center" }}>
-          AgroMonitor · Datos sincronizados en la nube
+          FertiMonitor · Datos sincronizados en la nube
         </div>
       </div>
     </>
