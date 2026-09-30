@@ -295,6 +295,20 @@ function FieldGroup({ label, children }) {
   );
 }
 
+function ObservacionField({ value, onChange }) {
+  return (
+    <FieldGroup label="Observación (opcional)">
+      <textarea
+        style={{ ...S.input, resize: "vertical", minHeight: 60, fontFamily: "inherit" }}
+        placeholder="Ej: riego cortado a medio día, revisar filtro..."
+        maxLength={300}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+      />
+    </FieldGroup>
+  );
+}
+
 function CommonFields({ data, onChange }) {
   const sectores = data.equipo ? EQUIPOS[data.equipo] || [] : [];
   return (
@@ -454,6 +468,7 @@ function MenuScreen({ user, onSelect, onLogout }) {
     { id: "drenaje", icon: "🚿", label: "Registro de Drenaje",  desc: "pH · CE · Nitratos · Potasio · Calcio · Sodio", accent: C.purple,  dim: C.purpleDim,  cardBg: "#1a1030" },
     { id: "humedad", icon: "🌱", label: "Registro de Humedad",  desc: "6 hileras · H. Inicial · H. Media · H. Final",  accent: C.yellow,  dim: C.yellowDim,  cardBg: "#1e2a0e" },
     { id: "pctdrenaje", icon: "📉", label: "% Drenaje", desc: "Un solo valor · porcentaje de drenaje", accent: C.blue, dim: C.blueDim, cardBg: "#0e2030" },
+    { id: "lisimetro", icon: "🧪", label: "Registro de Lisímetro", desc: "pH · CE · Nitratos · Potasio · Calcio · Sodio", accent: C.blue, dim: C.blueDim, cardBg: "#0e2c38" },
   ];
 
   const nombre = user.split(" ")[0];
@@ -564,6 +579,7 @@ function ResumenEnvioToast({ visible, tipo, cantidad }) {
 function GoteoScreen({ onBack, uid, nombre, onGuardar }) {
   const [common, setCommon] = useState({ fecha: fechaHoy(), equipo: "", sector: "" });
   const [med, setMed] = useState({});
+  const [observacion, setObservacion] = useState("");
   const [resumen, setResumen] = useState(false);
   const [err, setErr] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -584,7 +600,8 @@ function GoteoScreen({ onBack, uid, nombre, onGuardar }) {
       tipo: "Goteo", trabajador_uid: uid, trabajador_nombre: nombre, fecha: new Date(common.fecha),
       equipo: common.equipo, sector: common.sector,
       pH: med.pH || "", CE: med.CE || "", Nitratos: med.Nitratos || "",
-      Potasio: med.Potasio || "", Calcio: med.Calcio || "", Sodio: med.Sodio || ""
+      Potasio: med.Potasio || "", Calcio: med.Calcio || "", Sodio: med.Sodio || "",
+      observacion: observacion.trim()
     };
     onGuardar({ ...payload, trabajador: nombre, fecha: common.fecha, hora: horaActual() });
     setProgreso(55);
@@ -597,6 +614,7 @@ function GoteoScreen({ onBack, uid, nombre, onGuardar }) {
       setResumen(false);
       setProgreso(0);
       setMed({});
+      setObservacion("");
       setCommon({ fecha: fechaHoy(), equipo: "", sector: "" });
     }, 2600);
   };
@@ -614,6 +632,7 @@ function GoteoScreen({ onBack, uid, nombre, onGuardar }) {
         <div style={S.divider} />
         <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Mediciones</div>
         <MedicionFields data={med} onChange={(k, v) => setMed(p => ({ ...p, [k]: v }))} />
+        <ObservacionField value={observacion} onChange={setObservacion} />
         {err && <div style={{ color: C.error, fontSize: 12, textAlign: "center", padding: "4px 0" }}>{err}</div>}
         <button style={S.btn(C.accent, C.bg)} onClick={enviar} disabled={enviando}>
           {enviando ? "Enviando..." : "✓ Enviar registro"}
@@ -630,6 +649,7 @@ function GoteoScreen({ onBack, uid, nombre, onGuardar }) {
 function DrenajeScreen({ onBack, uid, nombre, onGuardar }) {
   const [common, setCommon] = useState({ fecha: fechaHoy(), equipo: "", sector: "" });
   const [med, setMed] = useState({});
+  const [observacion, setObservacion] = useState("");
   const [resumen, setResumen] = useState(false);
   const [err, setErr] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -650,7 +670,8 @@ function DrenajeScreen({ onBack, uid, nombre, onGuardar }) {
       tipo: "Drenaje", trabajador_uid: uid, trabajador_nombre: nombre, fecha: new Date(common.fecha),
       equipo: common.equipo, sector: common.sector,
       pH: med.pH || "", CE: med.CE || "", Nitratos: med.Nitratos || "",
-      Potasio: med.Potasio || "", Calcio: med.Calcio || "", Sodio: med.Sodio || ""
+      Potasio: med.Potasio || "", Calcio: med.Calcio || "", Sodio: med.Sodio || "",
+      observacion: observacion.trim()
     };
     onGuardar({ ...payload, trabajador: nombre, fecha: common.fecha, hora: horaActual() });
     setProgreso(55);
@@ -663,6 +684,7 @@ function DrenajeScreen({ onBack, uid, nombre, onGuardar }) {
       setResumen(false);
       setProgreso(0);
       setMed({});
+      setObservacion("");
       setCommon({ fecha: fechaHoy(), equipo: "", sector: "" });
     }, 2600);
   };
@@ -680,6 +702,7 @@ function DrenajeScreen({ onBack, uid, nombre, onGuardar }) {
         <div style={S.divider} />
         <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Mediciones</div>
         <MedicionFields data={med} onChange={(k, v) => setMed(p => ({ ...p, [k]: v }))} />
+        <ObservacionField value={observacion} onChange={setObservacion} />
         {err && <div style={{ color: C.error, fontSize: 12, textAlign: "center", padding: "4px 0" }}>{err}</div>}
         <button style={S.btn(C.purple, C.white)} onClick={enviar} disabled={enviando}>
           {enviando ? "Enviando..." : "✓ Enviar registro"}
@@ -696,6 +719,7 @@ function DrenajeScreen({ onBack, uid, nombre, onGuardar }) {
 function HumedadScreen({ onBack, uid, nombre, onGuardar }) {
   const [common, setCommon] = useState({ fecha: fechaHoy(), equipo: "", sector: "" });
   const [hileras, setHileras] = useState([{ id: 1, hi: "", hm: "", hf: "" }]);
+  const [observacion, setObservacion] = useState("");
   const [resumen, setResumen] = useState(false);
   const [err, setErr] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -718,10 +742,12 @@ function HumedadScreen({ onBack, uid, nombre, onGuardar }) {
     // Enviar todas las hileras en paralelo, actualizando el progreso a medida que cada una confirma
     const total = hileras.length;
     let completadas = 0;
+    const obsTrim = observacion.trim();
     const payloads = hileras.map(h => ({
       tipo: "Humedad", trabajador_uid: uid, trabajador_nombre: nombre, fecha: new Date(common.fecha),
       equipo: common.equipo, sector: common.sector,
-      hilera: h.id, humedad_inicial: h.hi, humedad_media: h.hm, humedad_final: h.hf
+      hilera: h.id, humedad_inicial: h.hi, humedad_media: h.hm, humedad_final: h.hf,
+      observacion: obsTrim
     }));
     await Promise.all(payloads.map(p => enviarAFirestore(p).then(() => {
       completadas += 1;
@@ -736,6 +762,7 @@ function HumedadScreen({ onBack, uid, nombre, onGuardar }) {
       setResumen(false);
       setProgreso(0);
       setHileras([{ id: 1, hi: "", hm: "", hf: "" }]);
+      setObservacion("");
       setCommon({ fecha: fechaHoy(), equipo: "", sector: "" });
     }, 2600);
   };
@@ -789,6 +816,8 @@ function HumedadScreen({ onBack, uid, nombre, onGuardar }) {
           </div>
         ))}
 
+        <ObservacionField value={observacion} onChange={setObservacion} />
+
         {err && <div style={{ color: C.error, fontSize: 12, textAlign: "center", padding: "4px 0" }}>{err}</div>}
         <button style={S.btn(C.yellow, "#1a2a08")} onClick={enviar} disabled={enviando}>
           {enviando ? "Enviando..." : `✓ Enviar ${hileras.length} hilera${hileras.length > 1 ? "s" : ""}`}
@@ -805,6 +834,7 @@ function HumedadScreen({ onBack, uid, nombre, onGuardar }) {
 function PorcentajeDrenajeScreen({ onBack, uid, nombre, onGuardar }) {
   const [common, setCommon] = useState({ fecha: fechaHoy(), equipo: "", sector: "" });
   const [valor, setValor] = useState("");
+  const [observacion, setObservacion] = useState("");
   const [resumen, setResumen] = useState(false);
   const [err, setErr] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -827,7 +857,8 @@ function PorcentajeDrenajeScreen({ onBack, uid, nombre, onGuardar }) {
     setProgreso(15);
     const payload = {
       tipo: "PorcentajeDrenaje", trabajador_uid: uid, trabajador_nombre: nombre, fecha: new Date(common.fecha),
-      equipo: common.equipo, sector: common.sector, PorcentajeDrenaje: valor
+      equipo: common.equipo, sector: common.sector, PorcentajeDrenaje: valor,
+      observacion: observacion.trim()
     };
     onGuardar({ ...payload, trabajador: nombre, fecha: common.fecha, hora: horaActual() });
     setProgreso(55);
@@ -840,6 +871,7 @@ function PorcentajeDrenajeScreen({ onBack, uid, nombre, onGuardar }) {
       setResumen(false);
       setProgreso(0);
       setValor("");
+      setObservacion("");
       setCommon({ fecha: fechaHoy(), equipo: "", sector: "" });
     }, 2600);
   };
@@ -861,6 +893,7 @@ function PorcentajeDrenajeScreen({ onBack, uid, nombre, onGuardar }) {
             min={LIMITE_PCT_DRENAJE.min} max={LIMITE_PCT_DRENAJE.max}
             value={valor} onChange={e => setValor(e.target.value)} />
         </FieldGroup>
+        <ObservacionField value={observacion} onChange={setObservacion} />
         {err && <div style={{ color: C.error, fontSize: 12, textAlign: "center", padding: "4px 0" }}>{err}</div>}
         <button style={S.btn(C.blue, "#0a1a26")} onClick={enviar} disabled={enviando}>
           {enviando ? "Enviando..." : "✓ Enviar registro"}
@@ -869,6 +902,76 @@ function PorcentajeDrenajeScreen({ onBack, uid, nombre, onGuardar }) {
       </div>
       <ProgressOverlay visible={enviando} progreso={progreso} titulo="Generando reporte" />
       <ResumenEnvioToast visible={resumen} tipo="% Drenaje" cantidad={1} />
+    </>
+  );
+}
+
+// ── FORMULARIO LISÍMETRO ─────────────────────────────────────────────────────
+function LisimetroScreen({ onBack, uid, nombre, onGuardar }) {
+  const [common, setCommon] = useState({ fecha: fechaHoy(), equipo: "", sector: "" });
+  const [med, setMed] = useState({});
+  const [observacion, setObservacion] = useState("");
+  const [resumen, setResumen] = useState(false);
+  const [err, setErr] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [progreso, setProgreso] = useState(0);
+
+  const handleCommon = (k, v) => setCommon(p => ({ ...p, [k]: v, ...(k === "equipo" ? { sector: "" } : {}) }));
+
+  const enviar = async () => {
+    if (enviando) return;
+    if (!common.equipo) { setErr("Debes seleccionar un equipo."); return; }
+    if (!common.sector) { setErr("Debes seleccionar un sector."); return; }
+    const errRango = validarMedicion(med);
+    if (errRango) { setErr(errRango); return; }
+    setErr("");
+    setEnviando(true);
+    setProgreso(15);
+    const payload = {
+      tipo: "Lisimetro", trabajador_uid: uid, trabajador_nombre: nombre, fecha: new Date(common.fecha),
+      equipo: common.equipo, sector: common.sector,
+      pH: med.pH || "", CE: med.CE || "", Nitratos: med.Nitratos || "",
+      Potasio: med.Potasio || "", Calcio: med.Calcio || "", Sodio: med.Sodio || "",
+      observacion: observacion.trim()
+    };
+    onGuardar({ ...payload, trabajador: nombre, fecha: common.fecha, hora: horaActual() });
+    setProgreso(55);
+    await enviarAFirestore(payload);
+    setProgreso(100);
+    await new Promise(r => setTimeout(r, 300));
+    setEnviando(false);
+    setResumen(true);
+    setTimeout(() => {
+      setResumen(false);
+      setProgreso(0);
+      setMed({});
+      setObservacion("");
+      setCommon({ fecha: fechaHoy(), equipo: "", sector: "" });
+    }, 2600);
+  };
+
+  return (
+    <>
+      <StatusBar />
+      <div style={S.header("#0e2c38")}>
+        <BackBtn onBack={onBack} />
+        <div style={S.headerTitle}>🧪 Registro de Lisímetro</div>
+        <div style={S.tag(C.blueDim, C.blueText)}>{nombre.split(" ")[0]}</div>
+      </div>
+      <div style={S.body}>
+        <CommonFields data={common} onChange={handleCommon} />
+        <div style={S.divider} />
+        <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Mediciones</div>
+        <MedicionFields data={med} onChange={(k, v) => setMed(p => ({ ...p, [k]: v }))} />
+        <ObservacionField value={observacion} onChange={setObservacion} />
+        {err && <div style={{ color: C.error, fontSize: 12, textAlign: "center", padding: "4px 0" }}>{err}</div>}
+        <button style={S.btn(C.blue, "#0a1a26")} onClick={enviar} disabled={enviando}>
+          {enviando ? "Enviando..." : "✓ Enviar registro"}
+        </button>
+        <button style={S.btnGhost} onClick={onBack}>← Volver al menú</button>
+      </div>
+      <ProgressOverlay visible={enviando} progreso={progreso} titulo="Generando reporte" />
+      <ResumenEnvioToast visible={resumen} tipo="Lisímetro" cantidad={1} />
     </>
   );
 }
@@ -920,7 +1023,7 @@ function ResumenScreen() {
     }
   });
 
-  const porTipo = { Goteo: [], Drenaje: [], Humedad: [], PorcentajeDrenaje: [] };
+  const porTipo = { Goteo: [], Drenaje: [], Humedad: [], PorcentajeDrenaje: [], Lisimetro: [] };
   listaHoy.forEach(r => {
     try { if (r && r.tipo && porTipo[r.tipo]) porTipo[r.tipo].push(r); } catch(e) {}
   });
@@ -932,6 +1035,7 @@ function ResumenScreen() {
     Drenaje: { icon: "🚿", accent: C.purple,  dim: C.purpleDim,  text: C.purpleText, label: "Drenaje" },
     Humedad: { icon: "🌱", accent: C.yellow,  dim: C.yellowDim,  text: C.yellowText, label: "Humedad" },
     PorcentajeDrenaje: { icon: "📉", accent: C.blue, dim: C.blueDim, text: C.blueText, label: "% Drenaje" },
+    Lisimetro: { icon: "🧪", accent: C.blue, dim: C.blueDim, text: C.blueText, label: "Lisímetro" },
   };
 
   return (
@@ -973,7 +1077,7 @@ function ResumenScreen() {
 
         {/* Contadores */}
         {!cargando && !error && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
           {Object.entries(porTipo).map(([tipo, listaT]) => {
             const cf = config[tipo];
             return (
@@ -1089,7 +1193,7 @@ export default function App() {
   }
 
   // Subpantallas dentro de "app"
-  const subScreens = ["goteo", "drenaje", "humedad", "pctdrenaje"];
+  const subScreens = ["goteo", "drenaje", "humedad", "pctdrenaje", "lisimetro"];
   const enFormulario = subScreens.includes(screen);
   const uid = authUser ? authUser.uid : null;
 
@@ -1114,6 +1218,9 @@ export default function App() {
         )}
         {screen === "pctdrenaje" && (
           <PorcentajeDrenajeScreen onBack={() => setScreen("app")} uid={uid} nombre={nombre} onGuardar={guardar} />
+        )}
+        {screen === "lisimetro" && (
+          <LisimetroScreen onBack={() => setScreen("app")} uid={uid} nombre={nombre} onGuardar={guardar} />
         )}
 
         {/* Navbar (solo cuando no estás en formulario) */}
