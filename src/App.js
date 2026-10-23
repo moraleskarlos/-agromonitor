@@ -247,8 +247,11 @@ async function enviarAFirestore(data) {
 function horaActual() {
   return new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
 }
+// Fecha de hoy según el reloj del teléfono (Chile). Antes se usaba toISOString(), que está en UTC:
+// después de las 21:00 (20:00 en invierno) proponía la fecha de MAÑANA.
 function fechaHoy() {
-  return new Date().toISOString().split("T")[0];
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 function fechaLegible() {
   return new Date().toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -337,6 +340,16 @@ function CommonFields({ data, onChange }) {
   );
 }
 
+// ── HITOS (eventos de manejo que cambian el comportamiento de las curvas) ──
+// Se registran desde su propio módulo ("Registro de Hito"), también cuando ese día no hubo medición
+// (ej: solo se aplicó agua). Se guardan en "mediciones" con tipo "Hito", uno por sector.
+const TIPOS_HITO = [
+  { label: "Cambio de receta",                  icon: "🧪" },
+  { label: "Cambio de objetivo de CE",          icon: "🎯" },
+  { label: "Riego solo agua (lavado de sales)", icon: "🧂" },
+  { label: "Aplicación de productos vía riego", icon: "💊" },
+  { label: "Otro",                              icon: "📌" },
+];
 // ── LÍMITES REALES (evitan errores de tipeo, no confundir con los rangos de alerta editables) ──
 const LIMITES = {
   pH:       { min: 0, max: 14 },
@@ -467,8 +480,9 @@ function MenuScreen({ user, onSelect, onLogout }) {
     { id: "goteo",   icon: "💧", label: "Registro de Goteo",    desc: "pH · CE · Nitratos · Potasio · Calcio · Sodio", accent: C.accent,  dim: C.accentDim,  cardBg: "#0e2e18" },
     { id: "drenaje", icon: "🚿", label: "Registro de Drenaje",  desc: "pH · CE · Nitratos · Potasio · Calcio · Sodio", accent: C.purple,  dim: C.purpleDim,  cardBg: "#1a1030" },
     { id: "humedad", icon: "🌱", label: "Registro de Humedad",  desc: "6 hileras · H. Inicial · H. Media · H. Final",  accent: C.yellow,  dim: C.yellowDim,  cardBg: "#1e2a0e" },
-    { id: "pctdrenaje", icon: "📉", label: "% Drenaje", desc: "Un solo valor · porcentaje de drenaje", accent: C.blue, dim: C.blueDim, cardBg: "#0e2030" },
+    { id: "pctdrenaje", icon: "📉", label: "% Drenaje", desc: "1 a 6 riegos · vol. goteo y drenaje (ml)", accent: C.blue, dim: C.blueDim, cardBg: "#0e2030" },
     { id: "lisimetro", icon: "🧪", label: "Registro de Lisímetro", desc: "pH · CE · Nitratos · Potasio · Calcio · Sodio", accent: C.blue, dim: C.blueDim, cardBg: "#0e2c38" },
+    { id: "hito", icon: "📌", label: "Registro de Hito", desc: "Cambio de receta · lavado · aplicación de productos...", accent: C.yellow, dim: C.yellowDim, cardBg: "#2a2208" },
   ];
 
   const nombre = user.split(" ")[0];
@@ -830,10 +844,36 @@ function HumedadScreen({ onBack, uid, nombre, onGuardar }) {
   );
 }
 
-// ── FORMULARIO % DRENAJE ─────────────────────────────────────────────────────
+// ── FORMULARIO % DRENAJE (por riego, en volumen) ──────────────────────────────
+// Cada riego tiene 2 mediciones: volumen en el gotero de la planta y volumen bajo la planta (drenaje).
+// % Drenaje del riego = vol. drenaje ÷ vol. goteo × 100 (lo calcula la app).
+// Igual que Humedad, se guarda un registro por riego. Cada uno trae también PorcentajeDrenaje,
+// así el dashboard y los registros antiguos (un solo %) siguen funcionando igual.
+const LIMITE_VOL_ML = { min: 0, max: 10000 };
+const RIEGO_VACIO = id => ({ id, vg: "", vd: "" });
+
+function pctRiego(r) {
+  const g = parseFloat(r.vg), d = parseFloat(r.vd);
+  if (isNaN(g) || isNaN(d) || g <= 0) return null;
+  return (d / g) * 100;
+}
+function fmtPct(v) { return v === null ? "—" : v.toFixed(1).replace(".", ",") + " %"; }
+
+function validarRiegos(riegos) {
+  for (const r of riegos) {
+    for (const [k, lbl] of [["vg", "Vol. goteo"], ["vd", "Vol. drenaje"]]) {
+      if (r[k] === "") return `Riego ${r.id}: falta completar ${lbl}.`;
+      const n = parseFloat(r[k]);
+      if (isNaN(n) || n < LIMITE_VOL_ML.min || n > LIMITE_VOL_ML.max) return `Riego ${r.id}: ${lbl} debe estar entre ${LIMITE_VOL_ML.min} y ${LIMITE_VOL_ML.max} ml.`;
+    }
+    if (parseFloat(r.vg) <= 0) return `Riego ${r.id}: el Vol. goteo debe ser mayor que 0.`;
+  }
+  return null;
+}
+
 function PorcentajeDrenajeScreen({ onBack, uid, nombre, onGuardar }) {
   const [common, setCommon] = useState({ fecha: fechaHoy(), equipo: "", sector: "" });
-  const [valor, setValor] = useState("");
+  const [riegos, setRiegos] = useState([RIEGO_VACIO(1)]);
   const [observacion, setObservacion] = useState("");
   const [resumen, setResumen] = useState(false);
   const [err, setErr] = useState("");
@@ -841,28 +881,43 @@ function PorcentajeDrenajeScreen({ onBack, uid, nombre, onGuardar }) {
   const [progreso, setProgreso] = useState(0);
 
   const handleCommon = (k, v) => setCommon(p => ({ ...p, [k]: v, ...(k === "equipo" ? { sector: "" } : {}) }));
+  const updateR = (id, key, val) => setRiegos(rs => rs.map(r => r.id === id ? { ...r, [key]: val } : r));
+  const addR = () => { if (riegos.length < 6) setRiegos(rs => [...rs, RIEGO_VACIO(rs.length + 1)]); };
+  const removeR = (id) => { if (riegos.length > 1) setRiegos(rs => rs.filter(r => r.id !== id).map((r, i) => ({ ...r, id: i + 1 }))); };
+
+  // % del día = total drenado ÷ total goteado (pondera por volumen; no es el promedio de los %)
+  const completos = riegos.filter(r => pctRiego(r) !== null);
+  const totG = completos.reduce((a, r) => a + parseFloat(r.vg), 0);
+  const totD = completos.reduce((a, r) => a + parseFloat(r.vd), 0);
+  const pctDia = totG > 0 ? (totD / totG) * 100 : null;
 
   const enviar = async () => {
     if (enviando) return;
     if (!common.equipo) { setErr("Debes seleccionar un equipo."); return; }
     if (!common.sector) { setErr("Debes seleccionar un sector."); return; }
-    if (valor === "") { setErr("Ingresa el porcentaje de drenaje."); return; }
-    const num = parseFloat(valor);
-    if (isNaN(num) || num < LIMITE_PCT_DRENAJE.min || num > LIMITE_PCT_DRENAJE.max) {
-      setErr(`El valor debe estar entre ${LIMITE_PCT_DRENAJE.min} y ${LIMITE_PCT_DRENAJE.max}%.`);
-      return;
-    }
+    const errR = validarRiegos(riegos);
+    if (errR) { setErr(errR); return; }
+    const sobre100 = riegos.filter(r => pctRiego(r) > 100).map(r => r.id);
+    if (sobre100.length && !window.confirm(`Riego ${sobre100.join(", ")}: el drenaje es mayor que el goteo (más de 100 %). ¿Enviar de todas formas?`)) return;
     setErr("");
     setEnviando(true);
-    setProgreso(15);
-    const payload = {
+    setProgreso(5);
+    const total = riegos.length;
+    let completadas = 0;
+    const obsTrim = observacion.trim();
+    const payloads = riegos.map(r => ({
       tipo: "PorcentajeDrenaje", trabajador_uid: uid, trabajador_nombre: nombre, fecha: new Date(common.fecha),
-      equipo: common.equipo, sector: common.sector, PorcentajeDrenaje: valor,
-      observacion: observacion.trim()
-    };
-    onGuardar({ ...payload, trabajador: nombre, fecha: common.fecha, hora: horaActual() });
-    setProgreso(55);
-    await enviarAFirestore(payload);
+      equipo: common.equipo, sector: common.sector,
+      riego: r.id, riegos_total: total,
+      vol_goteo_ml: parseFloat(r.vg), vol_drenaje_ml: parseFloat(r.vd),
+      PorcentajeDrenaje: Math.round(pctRiego(r) * 10) / 10,
+      observacion: obsTrim
+    }));
+    await Promise.all(payloads.map(p => enviarAFirestore(p).then(() => {
+      completadas += 1;
+      setProgreso(Math.max(5, Math.round((completadas / total) * 100)));
+    })));
+    onGuardar({ tipo: "PorcentajeDrenaje", trabajador: nombre, hora: horaActual(), ...common, riegos: total });
     setProgreso(100);
     await new Promise(r => setTimeout(r, 300));
     setEnviando(false);
@@ -870,11 +925,13 @@ function PorcentajeDrenajeScreen({ onBack, uid, nombre, onGuardar }) {
     setTimeout(() => {
       setResumen(false);
       setProgreso(0);
-      setValor("");
+      setRiegos([RIEGO_VACIO(1)]);
       setObservacion("");
       setCommon({ fecha: fechaHoy(), equipo: "", sector: "" });
     }, 2600);
   };
+
+  const inputMl = { ...S.input, padding: "9px 8px", fontSize: 13, textAlign: "center" };
 
   return (
     <>
@@ -887,21 +944,195 @@ function PorcentajeDrenajeScreen({ onBack, uid, nombre, onGuardar }) {
       <div style={S.body}>
         <CommonFields data={common} onChange={handleCommon} />
         <div style={S.divider} />
-        <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Medición</div>
-        <FieldGroup label="Porcentaje de Drenaje (%)">
-          <input style={S.input} type="number" inputMode="decimal" placeholder="0.0"
-            min={LIMITE_PCT_DRENAJE.min} max={LIMITE_PCT_DRENAJE.max}
-            value={valor} onChange={e => setValor(e.target.value)} />
-        </FieldGroup>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ color: C.text, fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+            Riegos del día <span style={S.tag(C.blueDim, C.blueText)}>{riegos.length} / 6</span>
+          </div>
+          {riegos.length < 6 && (
+            <button onClick={addR} style={{
+              background: C.blueDim, color: C.blueText,
+              border: `1px solid ${C.blue}44`, borderRadius: 8,
+              padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+            }}>+ Nuevo riego</button>
+          )}
+        </div>
+
+        {riegos.map(r => {
+          const pct = pctRiego(r);
+          return (
+            <div key={r.id} style={{ ...S.card, gap: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <span style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>Riego {r.id}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ color: pct === null ? C.textDim : pct > 100 ? C.error : C.blueText, fontWeight: 800, fontSize: 14 }}>{fmtPct(pct)}</span>
+                  {riegos.length > 1 && (
+                    <button onClick={() => removeR(r.id)} style={{
+                      background: "transparent", border: "none",
+                      color: C.error, fontSize: 16, cursor: "pointer", padding: 0, lineHeight: 1,
+                    }}>✕</button>
+                  )}
+                </div>
+              </div>
+              <div style={S.grid2}>
+                <FieldGroup label="Vol. goteo (ml)">
+                  <input style={inputMl} type="number" inputMode="decimal" placeholder="0"
+                    min={LIMITE_VOL_ML.min} max={LIMITE_VOL_ML.max}
+                    value={r.vg} onChange={e => updateR(r.id, "vg", e.target.value)} />
+                </FieldGroup>
+                <FieldGroup label="Vol. drenaje (ml)">
+                  <input style={inputMl} type="number" inputMode="decimal" placeholder="0"
+                    min={LIMITE_VOL_ML.min} max={LIMITE_VOL_ML.max}
+                    value={r.vd} onChange={e => updateR(r.id, "vd", e.target.value)} />
+                </FieldGroup>
+              </div>
+              <div style={{ color: C.textDim, fontSize: 10, marginTop: 6 }}>Goteo: en el gotero de la planta · Drenaje: bajo la planta</div>
+            </div>
+          );
+        })}
+
+        <div style={{ ...S.card, display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: C.blue + "55" }}>
+          <div>
+            <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>% Drenaje del día</div>
+            <div style={{ color: C.textMuted, fontSize: 11 }}>
+              {completos.length ? `${totD.toLocaleString("es-CL")} ml ÷ ${totG.toLocaleString("es-CL")} ml` : "Completa los volúmenes"}
+            </div>
+          </div>
+          <div style={{ color: pctDia === null ? C.textDim : C.blueText, fontWeight: 800, fontSize: 20 }}>{fmtPct(pctDia)}</div>
+        </div>
+
         <ObservacionField value={observacion} onChange={setObservacion} />
         {err && <div style={{ color: C.error, fontSize: 12, textAlign: "center", padding: "4px 0" }}>{err}</div>}
         <button style={S.btn(C.blue, "#0a1a26")} onClick={enviar} disabled={enviando}>
-          {enviando ? "Enviando..." : "✓ Enviar registro"}
+          {enviando ? "Enviando..." : `✓ Enviar ${riegos.length} riego${riegos.length > 1 ? "s" : ""}`}
         </button>
         <button style={S.btnGhost} onClick={onBack}>← Volver al menú</button>
       </div>
       <ProgressOverlay visible={enviando} progreso={progreso} titulo="Generando reporte" />
-      <ResumenEnvioToast visible={resumen} tipo="% Drenaje" cantidad={1} />
+      <ResumenEnvioToast visible={resumen} tipo="% Drenaje" cantidad={riegos.length} />
+    </>
+  );
+}
+
+// ── FORMULARIO HITO ─────────────────────────────────────────────────────────
+function HitoScreen({ onBack, uid, nombre, onGuardar }) {
+  const [fecha, setFecha] = useState(fechaHoy());
+  const [equipo, setEquipo] = useState("");
+  const [sectores, setSectores] = useState([]);
+  const [tipoHito, setTipoHito] = useState("");
+  const [descripcion, setDescripcion] = useState("");
+  const [resumen, setResumen] = useState(0);
+  const [err, setErr] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [progreso, setProgreso] = useState(0);
+
+  const lista = equipo ? EQUIPOS[equipo] || [] : [];
+  const todos = lista.length > 0 && sectores.length === lista.length;
+  const toggle = sec => setSectores(ss => ss.includes(sec) ? ss.filter(x => x !== sec) : [...ss, sec]);
+  const toggleTodos = () => setSectores(todos ? [] : [...lista]);
+
+  const enviar = async () => {
+    if (enviando) return;
+    if (!equipo) { setErr("Debes seleccionar un equipo."); return; }
+    if (!sectores.length) { setErr("Marca al menos un sector."); return; }
+    if (!tipoHito) { setErr("Elige el tipo de hito."); return; }
+    if (tipoHito === "Otro" && !descripcion.trim()) { setErr("Describe el hito (tipo \"Otro\")."); return; }
+    setErr("");
+    setEnviando(true);
+    setProgreso(5);
+    const total = sectores.length;
+    let listos = 0;
+    // Un registro por sector: así cada sector muestra su hito en sus propios gráficos
+    const payloads = sectores.map(sec => ({
+      tipo: "Hito", trabajador_uid: uid, trabajador_nombre: nombre, fecha: new Date(fecha),
+      equipo, sector: sec,
+      hito_tipo: tipoHito, hito_descripcion: descripcion.trim(),
+    }));
+    await Promise.all(payloads.map(p => enviarAFirestore(p).then(() => {
+      listos += 1;
+      setProgreso(Math.max(5, Math.round((listos / total) * 100)));
+    })));
+    onGuardar({ tipo: "Hito", trabajador: nombre, hora: horaActual(), fecha, equipo, sectores: total });
+    setProgreso(100);
+    await new Promise(r => setTimeout(r, 300));
+    setEnviando(false);
+    setResumen(total);
+    setTimeout(() => {
+      setResumen(0);
+      setProgreso(0);
+      setSectores([]);
+      setTipoHito("");
+      setDescripcion("");
+      setEquipo("");
+      setFecha(fechaHoy());
+    }, 2600);
+  };
+
+  const chip = activo => ({
+    background: activo ? C.yellowDim : "transparent", color: activo ? C.yellowText : C.textMuted,
+    border: `1px solid ${activo ? C.yellow + "88" : C.border}`, borderRadius: 8,
+    padding: "8px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "left",
+  });
+
+  return (
+    <>
+      <StatusBar />
+      <div style={S.header("#2a2208")}>
+        <BackBtn onBack={onBack} />
+        <div style={S.headerTitle}>📌 Registro de Hito</div>
+        <div style={S.tag(C.yellowDim, C.yellowText)}>{nombre.split(" ")[0]}</div>
+      </div>
+      <div style={S.body}>
+        <div style={{ color: C.textMuted, fontSize: 12 }}>
+          Cambios de manejo que pueden alterar las curvas (cambio de receta, lavado con agua, aplicación de productos...).
+          Se registran aunque ese día no se haga medición y se verán como una línea en los gráficos de cada sector.
+        </div>
+        <FieldGroup label="Fecha del hito">
+          <input style={S.input} type="date" value={fecha} onChange={e => setFecha(e.target.value)} />
+        </FieldGroup>
+        <FieldGroup label="Equipo">
+          <select style={S.select} value={equipo} onChange={e => { setEquipo(e.target.value); setSectores([]); }}>
+            <option value="">Seleccionar</option>
+            {Object.keys(EQUIPOS).map(e => <option key={e}>{e}</option>)}
+          </select>
+        </FieldGroup>
+        {equipo && (
+          <FieldGroup label={`Sectores (${sectores.length} de ${lista.length})`}>
+            <button type="button" onClick={toggleTodos} style={{ ...chip(todos), textAlign: "center" }}>
+              {todos ? "✓ Todos los sectores del equipo" : "Marcar todos los sectores del equipo"}
+            </button>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 6 }}>
+              {lista.map(sec => (
+                <button type="button" key={sec} onClick={() => toggle(sec)} style={chip(sectores.includes(sec))}>
+                  {sectores.includes(sec) ? "✓ " : ""}{sec}
+                </button>
+              ))}
+            </div>
+          </FieldGroup>
+        )}
+        <FieldGroup label="Tipo de hito">
+          <select style={S.select} value={tipoHito} onChange={e => setTipoHito(e.target.value)}>
+            <option value="">Seleccionar</option>
+            {TIPOS_HITO.map(t => <option key={t.label} value={t.label}>{t.icon} {t.label}</option>)}
+          </select>
+        </FieldGroup>
+        <FieldGroup label={tipoHito === "Otro" ? "Descripción (obligatoria)" : "Descripción (opcional)"}>
+          <textarea
+            style={{ ...S.input, resize: "vertical", minHeight: 60, fontFamily: "inherit" }}
+            placeholder="Ej: nueva receta R-12, solo agua por CE alta, ácido fosfórico 2 L/ha..."
+            maxLength={200}
+            value={descripcion}
+            onChange={e => setDescripcion(e.target.value)}
+          />
+        </FieldGroup>
+        {err && <div style={{ color: C.error, fontSize: 12, textAlign: "center", padding: "4px 0" }}>{err}</div>}
+        <button style={S.btn(C.yellow, "#1a2a08")} onClick={enviar} disabled={enviando}>
+          {enviando ? "Enviando..." : sectores.length > 1 ? `✓ Registrar hito en ${sectores.length} sectores` : "✓ Registrar hito"}
+        </button>
+        <button style={S.btnGhost} onClick={onBack}>← Volver al menú</button>
+      </div>
+      <ProgressOverlay visible={enviando} progreso={progreso} titulo="Registrando hito" />
+      <ResumenEnvioToast visible={resumen > 0} tipo="Hitos" cantidad={resumen} />
     </>
   );
 }
@@ -1010,9 +1241,9 @@ function ResumenScreen() {
   useEffect(() => { cargarRegistros(); }, []); // eslint-disable-line
 
   // Filtrar solo registros de hoy
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = fechaHoy();
   const listaHoy = lista.filter(r => {
-    if (!r.fecha) return false;
+    if (!r.fecha || r.anulado) return false; // los eliminados desde el dashboard no se muestran
     try {
       const fechaStr = String(r.fecha);
       // Intentar parsear la fecha y comparar
@@ -1023,7 +1254,7 @@ function ResumenScreen() {
     }
   });
 
-  const porTipo = { Goteo: [], Drenaje: [], Humedad: [], PorcentajeDrenaje: [], Lisimetro: [] };
+  const porTipo = { Goteo: [], Drenaje: [], Humedad: [], PorcentajeDrenaje: [], Lisimetro: [], Hito: [] };
   listaHoy.forEach(r => {
     try { if (r && r.tipo && porTipo[r.tipo]) porTipo[r.tipo].push(r); } catch(e) {}
   });
@@ -1036,6 +1267,7 @@ function ResumenScreen() {
     Humedad: { icon: "🌱", accent: C.yellow,  dim: C.yellowDim,  text: C.yellowText, label: "Humedad" },
     PorcentajeDrenaje: { icon: "📉", accent: C.blue, dim: C.blueDim, text: C.blueText, label: "% Drenaje" },
     Lisimetro: { icon: "🧪", accent: C.blue, dim: C.blueDim, text: C.blueText, label: "Lisímetro" },
+    Hito: { icon: "📌", accent: C.yellow, dim: C.yellowDim, text: C.yellowText, label: "Hito" },
   };
 
   return (
@@ -1077,7 +1309,7 @@ function ResumenScreen() {
 
         {/* Contadores */}
         {!cargando && !error && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
           {Object.entries(porTipo).map(([tipo, listaT]) => {
             const cf = config[tipo];
             return (
@@ -1123,7 +1355,13 @@ function ResumenScreen() {
                     <div style={{ color: C.textMuted, fontSize: 11 }}>
                       {(r.trabajador || r.usuario || "—").split(" ")[0]}
                       {r.tipo === "Humedad" && r.hileras ? ` · ${r.hileras} hilera${r.hileras > 1 ? "s" : ""}` : ""}
+                      {r.tipo === "PorcentajeDrenaje" && r.riego ? ` · Riego ${r.riego}: ${r.vol_drenaje_ml} / ${r.vol_goteo_ml} ml (${String(r.PorcentajeDrenaje).replace(".", ",")} %)` : ""}
                     </div>
+                    {r.hito_tipo && (
+                      <div style={{ color: C.yellowText, fontSize: 11, marginTop: 3, fontWeight: 600 }}>
+                        📌 {r.hito_tipo}{r.hito_descripcion ? ` — ${r.hito_descripcion}` : ""}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -1193,7 +1431,7 @@ export default function App() {
   }
 
   // Subpantallas dentro de "app"
-  const subScreens = ["goteo", "drenaje", "humedad", "pctdrenaje", "lisimetro"];
+  const subScreens = ["goteo", "drenaje", "humedad", "pctdrenaje", "lisimetro", "hito"];
   const enFormulario = subScreens.includes(screen);
   const uid = authUser ? authUser.uid : null;
 
@@ -1218,6 +1456,9 @@ export default function App() {
         )}
         {screen === "pctdrenaje" && (
           <PorcentajeDrenajeScreen onBack={() => setScreen("app")} uid={uid} nombre={nombre} onGuardar={guardar} />
+        )}
+        {screen === "hito" && (
+          <HitoScreen onBack={() => setScreen("app")} uid={uid} nombre={nombre} onGuardar={guardar} />
         )}
         {screen === "lisimetro" && (
           <LisimetroScreen onBack={() => setScreen("app")} uid={uid} nombre={nombre} onGuardar={guardar} />
